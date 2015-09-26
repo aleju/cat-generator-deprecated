@@ -2,7 +2,7 @@ require 'torch'
 --require 'optim'
 require 'image'
 --require 'datasets'
-require 'pl'
+require 'pl' -- this is somehow responsible for lapp working in qlua mode
 require 'paths'
 ok, DISP = pcall(require, 'display')
 if not ok then print('display not found. unable to plot') end
@@ -17,6 +17,7 @@ OPT = lapp[[
   -s,--save          (default "logs")      subdirectory to save logs
   --saveFreq         (default 10)          save every saveFreq epochs
   -n,--network       (default "")          reload pretrained network
+  --V_network        (default "logs/v.net")
   -p,--plot                                plot while training
   --SGD_lr           (default 0.02)        SGD learning rate
   -b,--batchSize     (default 16)          batch size
@@ -101,19 +102,49 @@ else
     require 'nn'
 end
 require 'dpnn'
-torch.setdefaulttensortype('torch.FloatTensor')
-
 require 'LeakyReLU'
 --require 'AddGaussianNoise'
+torch.setdefaulttensortype('torch.FloatTensor')
 
 ----------------------------------------------------------------------
 -- Load / Define network
 ----------------------------------------------------------------------
+local tmp = torch.load(OPT.V_network)
+MODEL_V = tmp.V
+MODEL_V:evaluate()
+
+function rateWithV(images)
+    local imagesTensor
+    local N
+    if type(images) == 'table' then
+        N = #images
+        imagesTensor = torch.Tensor(N, IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3])
+        for i=1,N do
+            imagesTensor[i] = images[i]
+        end
+    else
+        N = images:size(1)
+        imagesTensor = images
+    end
+    
+    local predictions = MODEL_V:forward(imagesTensor)
+    local sm = 0
+    for i=1,N do
+        -- first neuron in V signals whether the image is fake (1=yes, 0=no)
+        sm = sm + predictions[i][1]
+    end
+    
+    local fakiness = sm / N
+    
+    -- higher values for better images
+    return (1 - fakiness)
+end
+
 -- load previous networks (D and G)
 -- or initialize them new
 if OPT.network ~= "" then
     print(string.format("<trainer> reloading previously trained network: %s", OPT.network))
-    tmp = torch.load(OPT.network)
+    local tmp = torch.load(OPT.network)
     MODEL_D = tmp.D
     MODEL_G = tmp.G
     OPTSTATE = tmp.optstate
@@ -162,7 +193,7 @@ else
   local activation = nn.PReLU
   local branch_conv = nn.Sequential()
   
-  branch_conv:add(nn.Dropout())
+  branch_conv:add(nn.Dropout(0.1))
   
   branch_conv:add(nn.SpatialConvolution(IMG_DIMENSIONS[1], 32, 3, 3, 1, 1, (3-1)/2))
   branch_conv:add(activation())
@@ -278,20 +309,8 @@ end
 
 if OPT.gpu then
     print("Copying model to gpu...")
-    MODEL_D:cuda()
-    MODEL_G:cuda()
-    
-    local tmp = nn.Sequential()
-    tmp:add(nn.Copy('torch.FloatTensor', 'torch.CudaTensor'))
-    tmp:add(MODEL_D)
-    tmp:add(nn.Copy('torch.CudaTensor', 'torch.FloatTensor'))
-    MODEL_D = tmp
-    
-    local tmp = nn.Sequential()
-    tmp:add(nn.Copy('torch.FloatTensor', 'torch.CudaTensor'))
-    tmp:add(MODEL_G)
-    tmp:add(nn.Copy('torch.CudaTensor', 'torch.FloatTensor'))
-    MODEL_G = tmp
+    MODEL_D = NN_UTILS.activateCuda(MODEL_D)
+    MODEL_G = NN_UTILS.activateCuda(MODEL_G)
 end
 
 -- loss function: negative log-likelihood
@@ -308,6 +327,8 @@ print('Discriminator network:')
 print(MODEL_D)
 print('Generator network:')
 print(MODEL_G)
+print('Validator network:')
+print(MODEL_V)
 
 -- this matrix records the current confusion across classes
 CONFUSION = optim.ConfusionMatrix(CLASSES)
@@ -340,10 +361,8 @@ end
 if EPOCH == nil then
     EPOCH = 1
 end
+PLOT_DATA = {}
 VIS_NOISE_INPUTS = NN_UTILS.createNoiseInputs(100)
-if OPT.gpu then
-    --VIS_NOISE_INPUTS = VIS_NOISE_INPUTS:cuda()
-end
 
 -- training loop
 while true do

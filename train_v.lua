@@ -6,6 +6,7 @@ require 'optim'
 ok, DISP = pcall(require, 'display')
 if not ok then print('display not found. unable to plot') end
 DATASET = require 'dataset'
+NN_UTILS = require 'utils.nn_utils'
 
 OPT = lapp[[
     --save          (default "logs")
@@ -73,22 +74,14 @@ function main()
     if OPT.aws then
         DATASET.setDirs({"/mnt/datasets/out_faces_64x64", "/mnt/datasets/images_faces_aug"})
     else
-        --DATASET.setDirs({"/media/aj/ssd2a/ml/datasets/10k_cats/out_faces_64x64", "/media/aj/ssd2a/ml/datasets/flickr-cats/images_faces_aug"})
-        DATASET.setDirs({"/media/aj/ssd2a/ml/datasets/10k_cats/out_faces_64x64"})
+        DATASET.setDirs({"/media/aj/ssd2a/ml/datasets/10k_cats/out_faces_64x64", "/media/aj/ssd2a/ml/datasets/flickr-cats/images_faces_aug"})
+        --DATASET.setDirs({"/media/aj/ssd2a/ml/datasets/10k_cats/out_faces_64x64"})
     end
     ----------------------------------------------------------------------
     
     V = create_V()
     
-    if OPT.gpu then
-        V:cuda()
-        
-        local tmp = nn.Sequential()
-        tmp:add(nn.Copy('torch.FloatTensor', 'torch.CudaTensor'))
-        tmp:add(V)
-        tmp:add(nn.Copy('torch.CudaTensor', 'torch.FloatTensor'))
-        V = tmp
-    end
+    if OPT.gpu then V = NN_UTILS.activateCuda(V) end
     
     print("network V:")
     print(V)
@@ -282,12 +275,14 @@ function epoch(model)
     if EPOCH % OPT.saveFreq == 0 then
         local filename = paths.concat(OPT.save, 'v.net')
         os.execute(string.format("mkdir -p %s", sys.dirname(filename)))
-        if paths.filep(filename) then
-            os.execute(string.format("mv %s %s.old", filename, filename))
-        end
+        --if paths.filep(filename) then
+        --    os.execute(string.format("mv %s %s.old", filename, filename))
+        --end
         print(string.format("<trainer> saving network to %s", filename))
         
-        torch.save(filename, {V=model, opt=OPT, optstate=OPTSTATE, epoch=EPOCH+1})
+        -- apparently something in the OPTSTATE is a CudaTensor, so saving it and then loading
+        -- in CPU mode would cause an error
+        torch.save(filename, {V=NN_UTILS.deactivateCuda(model), opt=OPT, EPOCH=EPOCH+1}) --, optstate=OPTSTATE
     end
     
     EPOCH = EPOCH + 1

@@ -178,6 +178,11 @@ function nn_utils.visualizeProgress(noiseInputs)
     -- find good images (according to D) among the randomly generated ones
     local goodImages, _ = nn_utils.sortImagesByPrediction(randomImages, false, 50)
 
+    local semiRandomImagesRefinedRating = rateWithV(semiRandomImagesRefined)
+    local goodImagesRating = rateWithV(goodImages)
+    local badImagesRating = rateWithV(badImages)
+    table.insert(PLOT_DATA, {EPOCH, semiRandomImagesRefinedRating, goodImagesRating, badImagesRating})
+
     if semiRandomImagesUnrefined then
         DISP.image(semiRandomImagesUnrefined, {win=OPT.window, width=IMG_DIMENSIONS[3]*15, title="semi-random generated images (before G)"})
     end
@@ -185,6 +190,8 @@ function nn_utils.visualizeProgress(noiseInputs)
     DISP.image(goodImages, {win=OPT.window+2, width=IMG_DIMENSIONS[3]*15, title="best samples (first is best)"})
     DISP.image(badImages, {win=OPT.window+3, width=IMG_DIMENSIONS[3]*15, title="worst samples (first is worst)"})
     DISP.image(trainImages, {win=OPT.window+4, width=IMG_DIMENSIONS[3]*15, title="original images from training set"})
+    DISP.plot(PLOT_DATA, {win=OPT.window+5, labels={'epoch', 'V(semiRandom)', 'V(goodImages)', 'V(badImages)'}, title='Rating by V'})
+    print(string.format("<nnutils viz> [V] semiRandom: %.4f, goodImages: %.4f, badImages: %.4f", semiRandomImagesRefinedRating, goodImagesRating, badImagesRating))
     
     nn_utils.saveImagesAsGrid(string.format("%s/images/%d_%05d.png", OPT.save, START_TIME, EPOCH), semiRandomImagesRefined, 10, 10, EPOCH)
     nn_utils.saveImagesAsGrid(string.format("%s/images_good/%d_%05d.png", OPT.save, START_TIME, EPOCH), goodImages, 7, 7, EPOCH)
@@ -315,6 +322,40 @@ function nn_utils.saveImagesAsGrid(filepath, images, height, width, epoch)
     local grid = nn_utils.imagesToGridTensor(images, height, width, epoch)
     os.execute(string.format("mkdir -p %s", sys.dirname(filepath)))
     image.save(filepath, grid)
+end
+
+function nn_utils.deactivateCuda(net)
+    local newNet = net:clone()
+    newNet:float()
+    --[[
+    if torch.type(newNet:get(1)) == 'nn.Copy' then
+        print("Removing (1)")
+        newNet:remove(1)
+    else
+        print(torch.type(newNet:get(1)))
+    end
+    if torch.type(newNet:get(#newNet:listModules())) == 'nn.Copy' then
+        print("Removing (last)")
+        newNet:remove(#newNet:listModules())
+    else
+        print(torch.type(newNet:get(#newNet:listModules())))
+    end
+    --]]
+    if torch.type(newNet:get(1)) == 'nn.Copy' then
+        return newNet:get(2)
+    else
+        return newNet
+    end
+end
+
+function nn_utils.activateCuda(net)
+    local newNet = net:clone()
+    newNet:cuda()
+    local tmp = nn.Sequential()
+    tmp:add(nn.Copy('torch.FloatTensor', 'torch.CudaTensor'))
+    tmp:add(newNet)
+    tmp:add(nn.Copy('torch.CudaTensor', 'torch.FloatTensor'))
+    return tmp
 end
 
 return nn_utils

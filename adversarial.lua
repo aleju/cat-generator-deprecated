@@ -27,11 +27,11 @@ function adversarial.mean(t)
 end
 
 -- main training function
-function adversarial.train(dataset, maxAccuracyD, accsInterval)
+function adversarial.train(trainData, maxAccuracyD, accsInterval)
     EPOCH = EPOCH or 1
     local N_epoch = OPT.N_epoch
     if N_epoch <= 0 then
-        N_epoch = dataset:size()
+        N_epoch = trainData:size()
     end
     local dataBatchSize = OPT.batchSize / 2 -- size of a half-batch for D or G
     local time = sys.clock()
@@ -237,8 +237,8 @@ function adversarial.train(dataset, maxAccuracyD, accsInterval)
             local inputIdx = 1
             local realDataSize = thisBatchSize / 2
             for i = 1, realDataSize do
-                local randomIdx = math.random(dataset:size())
-                inputs[inputIdx] = dataset[randomIdx]:clone()
+                local randomIdx = math.random(trainData:size())
+                inputs[inputIdx] = trainData[randomIdx]:clone()
                 targets[inputIdx] = Y_NOT_GENERATOR
                 inputIdx = inputIdx + 1
             end
@@ -281,8 +281,8 @@ function adversarial.train(dataset, maxAccuracyD, accsInterval)
             local inputIdx = 1
             local realDataSize = thisBatchSize / 2
             for i = 1, realDataSize do
-                local randomIdx = math.random(dataset:size())
-                inputs[inputIdx] = dataset[randomIdx]:clone()
+                local randomIdx = math.random(trainData:size())
+                inputs[inputIdx] = trainData[randomIdx]:clone()
                 targets[inputIdx] = Y_NOT_GENERATOR
                 inputIdx = inputIdx + 1
             end
