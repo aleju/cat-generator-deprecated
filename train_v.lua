@@ -213,7 +213,7 @@ function epoch(model)
                 f = f + OPT.V_L1 * torch.norm(PARAMETERS_V, 1)
                 f = f + OPT.V_L2 * torch.norm(PARAMETERS_V, 2)^2/2
                 -- Gradients:
-                GRAD_PARAMETERS_V:add(torch.sign(PARAMETERS_V):mul(OPT.V_L1) + PARAMETERS_D:clone():mul(OPT.V_L2) )
+                GRAD_PARAMETERS_V:add(torch.sign(PARAMETERS_V):mul(OPT.V_L1) + PARAMETERS_V:clone():mul(OPT.V_L2) )
             end
 
             -- update confusion (add 1 since targets are binary)
