@@ -7,6 +7,7 @@ ok, DISP = pcall(require, 'display')
 if not ok then print('display not found. unable to plot') end
 DATASET = require 'dataset'
 NN_UTILS = require 'utils.nn_utils'
+MODELS = require 'models'
 
 OPT = lapp[[
     --save          (default "logs")
@@ -79,7 +80,7 @@ function main()
     end
     ----------------------------------------------------------------------
     
-    V = create_V()
+    V = MODELS.create_V(IMG_DIMENSIONS)
     
     if OPT.gpu then V = NN_UTILS.activateCuda(V) end
     
@@ -98,91 +99,6 @@ function main()
         epoch(V)
         visualizeProgress()
     end
-end
-
-function create_V()
-    local model = nn.Sequential()
-    local activation = nn.LeakyReLU
-    
-    --[[
-    model:add(nn.SpatialConvolution(IMG_DIMENSIONS[1], 32, 3, 3, 1, 1, (3-1)/2))
-    model:add(activation())
-    model:add(nn.SpatialConvolution(32, 32, 3, 3, 1, 1, (3-1)/2))
-    model:add(activation())
-    model:add(nn.SpatialBatchNormalization(32))
-    model:add(nn.SpatialDropout())
-  
-    model:add(nn.SpatialConvolution(32, 64, 3, 3, 1, 1, (3-1)/2))
-    model:add(activation())
-    model:add(nn.SpatialConvolution(64, 64, 3, 3, 1, 1, (3-1)/2))
-    model:add(activation())
-    model:add(nn.SpatialMaxPooling(2, 2))
-    model:add(nn.SpatialBatchNormalization(64))
-    model:add(nn.SpatialDropout())
-    model:add(nn.View(64, 16 * 16))
-  
-    local parallel = nn.Parallel(2, 2)
-    for i=1,64 do
-        local lin = nn.Sequential()
-        lin:add(nn.Linear(16*16, 128))
-        lin:add(activation())
-        lin:add(nn.BatchNormalization(128))
-        lin:add(nn.Dropout())
-        lin:add(nn.Linear(128, 8))
-        lin:add(activation())
-        parallel:add(lin)
-    end
-    model:add(parallel)
-    model:add(nn.BatchNormalization(64*8))
-  
-    model:add(nn.Linear(64*8, 128))
-    model:add(activation())
-    model:add(nn.BatchNormalization(128))
-    model:add(nn.Dropout())
-  
-    model:add(nn.Linear(128, 128))
-    model:add(activation())
-    model:add(nn.BatchNormalization(128))
-    model:add(nn.Dropout())
-  
-    model:add(nn.Linear(128, 2))
-    model:add(nn.SoftMax())
-    --]]
-  
-    model:add(nn.SpatialConvolution(IMG_DIMENSIONS[1], 64, 3, 3, 1, 1, (3-1)/2))
-    model:add(activation())
-    model:add(nn.SpatialConvolution(64, 64, 3, 3, 1, 1, (3-1)/2))
-    model:add(activation())
-    model:add(nn.SpatialMaxPooling(2, 2))
-    model:add(nn.SpatialBatchNormalization(64))
-    model:add(nn.Dropout())
-  
-    model:add(nn.SpatialConvolution(64, 128, 3, 3, 1, 1, (3-1)/2))
-    model:add(activation())
-    model:add(nn.SpatialConvolution(128, 128, 3, 3, 1, 1, (3-1)/2))
-    model:add(activation())
-    model:add(nn.SpatialMaxPooling(2, 2))
-    model:add(nn.SpatialBatchNormalization(128))
-    model:add(nn.SpatialDropout())
-    model:add(nn.View(128 * 8 * 8))
-    model:add(nn.BatchNormalization(128*8*8))
-  
-    model:add(nn.Linear(128*8*8, 1024))
-    model:add(activation())
-    model:add(nn.BatchNormalization(1024))
-    model:add(nn.Dropout())
-  
-    model:add(nn.Linear(1024, 1024))
-    model:add(activation())
-    model:add(nn.BatchNormalization(1024))
-    model:add(nn.Dropout())
-  
-    model:add(nn.Linear(1024, 2))
-    model:add(nn.SoftMax())
-  
-    model = require('weight-init')(model, 'heuristic')
-  
-    return model
 end
 
 function epoch(model)
