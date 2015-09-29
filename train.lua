@@ -85,8 +85,8 @@ DATASET.setScale(OPT.scale)
 if OPT.aws then
     DATASET.setDirs({"/mnt/datasets/out_faces_64x64", "/mnt/datasets/images_faces_aug"})
 else
-    --DATASET.setDirs({"/media/aj/ssd2a/ml/datasets/10k_cats/out_faces_64x64", "/media/aj/ssd2a/ml/datasets/flickr-cats/images_faces_aug"})
-    DATASET.setDirs({"/media/aj/ssd2a/ml/datasets/10k_cats/out_faces_64x64"})
+    DATASET.setDirs({"/media/aj/ssd2a/ml/datasets/10k_cats/out_faces_64x64", "/media/aj/ssd2a/ml/datasets/flickr-cats/images_faces_aug"})
+    --DATASET.setDirs({"/media/aj/ssd2a/ml/datasets/10k_cats/out_faces_64x64"})
 end
 ----------------------------------------------------------------------
 
@@ -190,51 +190,75 @@ else
   MODEL_D = branch_conv
   --]]
   
+  --[[
   local activation = nn.PReLU
   local branch_conv = nn.Sequential()
   
   branch_conv:add(nn.Dropout(0.1))
   
-  branch_conv:add(nn.SpatialConvolution(IMG_DIMENSIONS[1], 32, 3, 3, 1, 1, (3-1)/2))
+  branch_conv:add(nn.SpatialConvolution(IMG_DIMENSIONS[1], 64, 3, 3, 1, 1, (3-1)/2))
   branch_conv:add(activation())
   --branch_conv:add(nn.Dropout())
-  branch_conv:add(nn.SpatialConvolution(32, 32, 3, 3, 1, 1, (3-1)/2))
+  branch_conv:add(nn.SpatialConvolution(64, 64, 3, 3, 1, 1, (3-1)/2))
   branch_conv:add(activation())
   --branch_conv:add(nn.SpatialMaxPooling(2, 2))
   --branch_conv:add(nn.SpatialDropout())
-  --branch_conv:add(nn.Dropout())
+  branch_conv:add(nn.Dropout())
   
-  branch_conv:add(nn.SpatialConvolution(32, 64, 3, 3, 1, 1, (3-1)/2))
-  branch_conv:add(activation())
   branch_conv:add(nn.SpatialConvolution(64, 128, 3, 3, 1, 1, (3-1)/2))
   branch_conv:add(activation())
-  --branch_conv:add(nn.SpatialDropout())
   branch_conv:add(nn.SpatialMaxPooling(2, 2))
+  branch_conv:add(nn.SpatialConvolution(128, 128, 3, 3, 1, 1, (3-1)/2))
+  branch_conv:add(activation())
   branch_conv:add(nn.Dropout())
-  branch_conv:add(nn.View(128, 16 * 16))
-  
+  --branch_conv:add(nn.SpatialMaxPooling(2, 2))
+  --branch_conv:add(nn.Dropout())
+  branch_conv:add(nn.View(128, 16*16))
   local parallel = nn.Parallel(2, 2)
   for i=1,128 do
-    local lin = nn.Sequential()
-    lin:add(nn.Linear(16*16, 64))
-    lin:add(activation())
-    lin:add(nn.Dropout())
-    lin:add(nn.Linear(64, 16))
-    lin:add(activation())
-    lin:add(nn.TotalDropout())
-    parallel:add(lin)
+    parallel:add(nn.Linear(16*16, 128))
   end
   branch_conv:add(parallel)
-  
-  branch_conv:add(nn.Linear(128*16, 1024))
   branch_conv:add(activation())
   branch_conv:add(nn.Dropout())
   
-  branch_conv:add(nn.Linear(1024, 1024))
-  branch_conv:add(activation())
-  branch_conv:add(nn.Dropout())
+  branch_conv:add(nn.Linear(128*128, 1))
+  branch_conv:add(nn.Sigmoid())
   
-  branch_conv:add(nn.Linear(1024, 1))
+  MODEL_D = branch_conv
+  --]]
+  
+  
+  local activation = nn.PReLU
+  local branch_conv = nn.Sequential()
+  
+  --local parallel = nn.Parallel(2, 2)
+  local parallel = nn.Concat(2)
+  local submodel = nn.Sequential()
+  submodel:add(nn.Dropout(0.25))
+  submodel:add(nn.SpatialConvolution(IMG_DIMENSIONS[1], 64, 3, 3, 1, 1, (3-1)/2))
+  submodel:add(activation())
+  submodel:add(nn.SpatialConvolution(64, 64, 3, 3, 1, 1, (3-1)/2))
+  submodel:add(activation())
+  submodel:add(nn.SpatialAveragePooling(2, 2, 2, 2))
+  submodel:add(nn.SpatialConvolution(64, 128, 3, 3, 1, 1, (3-1)/2))
+  submodel:add(activation())
+  submodel:add(nn.SpatialConvolution(128, 128, 3, 3, 1, 1, (3-1)/2))
+  submodel:add(activation())
+  submodel:add(nn.SpatialDropout())
+  submodel:add(nn.SpatialAveragePooling(2, 2, 2, 2))
+  submodel:add(nn.View(128*8*8))
+  submodel:add(nn.Linear(128*8*8, 512))
+  submodel:add(activation())
+  submodel:add(nn.Dropout())
+  submodel:add(nn.Linear(512, 128))
+  submodel:add(activation())
+  parallel:add(submodel)
+  for i=2,4 do parallel:add(submodel:sharedClone()) end
+  
+  branch_conv:add(parallel)
+  branch_conv:add(nn.Dropout())
+  branch_conv:add(nn.Linear(128*4, 1))
   branch_conv:add(nn.Sigmoid())
   
   MODEL_D = branch_conv
@@ -321,14 +345,14 @@ PARAMETERS_D, GRAD_PARAMETERS_D = MODEL_D:getParameters()
 PARAMETERS_G, GRAD_PARAMETERS_G = MODEL_G:getParameters()
 
 -- print networks
-print("Autoencoder network:")
-print(MODEL_AE)
-print('Discriminator network:')
-print(MODEL_D)
-print('Generator network:')
-print(MODEL_G)
-print('Validator network:')
-print(MODEL_V)
+--print("Autoencoder network:")
+--print(MODEL_AE)
+--print('Discriminator network:')
+--print(MODEL_D)
+--print('Generator network:')
+--print(MODEL_G)
+--print('Validator network:')
+--print(MODEL_V)
 
 -- this matrix records the current confusion across classes
 CONFUSION = optim.ConfusionMatrix(CLASSES)

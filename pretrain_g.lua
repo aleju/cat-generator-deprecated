@@ -158,7 +158,7 @@ function epoch()
     print(string.format("<trainer> loss: %.4f", CRITERION.output))
     
     if EPOCH % OPT.saveFreq == 0 then
-        local filename = paths.concat(OPT.save, string.format('g_pretrained_c%d_h%d_w%d_n%d.net', IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3], OPT.noiseDim))
+        local filename = paths.concat(OPT.save, string.format('g_pretrained_%dx%dx%d_nd%d.net', IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3], OPT.noiseDim))
         os.execute(string.format("mkdir -p %s", sys.dirname(filename)))
         --if paths.filep(filename) then
         --    os.execute(string.format("mv %s %s.old", filename, filename))
