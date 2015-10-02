@@ -62,6 +62,7 @@ require 'LeakyReLU'
 torch.setdefaulttensortype('torch.FloatTensor')
 
 
+-- Main function, load data, create network, start training.
 function main()
     ----------------------------------------------------------------------
     -- get/create dataset
@@ -101,7 +102,8 @@ function main()
     end
 end
 
-function epoch(model)
+-- Run one epoch of training.
+function epoch()
     local startTime = sys.clock()
     local batchIdx = 0
     local trained = 0
@@ -116,12 +118,12 @@ function epoch(model)
             GRAD_PARAMETERS_V:zero()
 
             --  forward pass
-            local outputs = model:forward(inputs)
+            local outputs = V:forward(inputs)
             local f = CRITERION:forward(outputs, targets)
 
             -- backward pass 
             local df_do = CRITERION:backward(outputs, targets)
-            model:backward(inputs, df_do)
+            V:backward(inputs, df_do)
 
             -- penalties (L1 and L2):
             if OPT.V_L1 ~= 0 or OPT.V_L2 ~= 0 then
@@ -164,7 +166,7 @@ function epoch(model)
         end
 
         -- Fake data
-        local images = createSyntheticImages(thisBatchSize/2, model)
+        local images = createSyntheticImages(thisBatchSize/2, V)
         for i = 1, realDataSize do
             inputs[exampleIdx] = images[i]:clone()
             targets[exampleIdx][Y_REAL+1] = 0
@@ -198,16 +200,18 @@ function epoch(model)
         
         -- apparently something in the OPTSTATE is a CudaTensor, so saving it and then loading
         -- in CPU mode would cause an error
-        torch.save(filename, {V=NN_UTILS.deactivateCuda(model), opt=OPT, EPOCH=EPOCH+1}) --, optstate=OPTSTATE
+        torch.save(filename, {V=NN_UTILS.deactivateCuda(V), opt=OPT, EPOCH=EPOCH+1}) --, optstate=OPTSTATE
     end
     
     EPOCH = EPOCH + 1
 end
 
+-- Create plots showing the current training progress.
 function visualizeProgress()
     -- deactivate dropout
     V:evaluate()
     
+    -- gather 50 real images and 50 fake (synthetic) images
     local imagesReal = DATASET.loadRandomImages(50)
     local imagesFake = createSyntheticImages(50)
     local both = torch.Tensor(100, IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3])
@@ -218,10 +222,17 @@ function visualizeProgress()
         both[imagesReal:size(1) + i] = imagesFake[i]
     end
     
+    -- let V judge the 50 real and 50 fake images
+    -- each single prediction is an array [p(fake), p(real)]
     local predictions = V:forward(both)
+
+    -- separate the images in good/bad one based on what
+    -- V thinks about them, i.e. based on p(fake)
     local goodImages = {}
     local badImages = {}
     for i=1,predictions:size(1) do
+        -- these if statements help spotting problems in the generation
+        -- of the synthetic images
         if torch.any(both[i]:gt(1.0)) then
             print("[WARNING] bad values in image")
             print(both[i][both[i]:gt(1.0)])
@@ -233,7 +244,8 @@ function visualizeProgress()
             print("image i=", i, " is lt0")
         end
     
-        --print("i=", i, "predictions[i][1]=", predictions[i][1])
+        -- add image i to good or bad images, depending on
+        -- what V thinks about it
         if predictions[i][1] < 0.5 then
             goodImages[#goodImages+1] = both[i]
         else
@@ -241,6 +253,7 @@ function visualizeProgress()
         end
     end
     
+    -- show the gathered good/bad images via display
     if #goodImages > 0 then
         DISP.image(goodImages, {win=OPT.window+0, width=IMG_DIMENSIONS[3]*15, title="V: rated as real images (Epoch " .. EPOCH .. ")"})
     end
@@ -252,6 +265,13 @@ function visualizeProgress()
     V:training()
 end
 
+-- Creates N synthetic (fake) images.
+-- The sizes match the one set in OPT.scale.
+-- @param N Number of images to create.
+-- @param allowSubcalls Whether to allow mixing the created images with
+--                      other synthetic images created via more calls
+--                      to this method.
+-- @returns List of torch.Tensor(channels, height, width)
 function createSyntheticImages(N, allowSubcalls)
     if allowSubcalls == nil then allowSubcalls = true end
     local images
@@ -270,18 +290,12 @@ function createSyntheticImages(N, allowSubcalls)
         images = createSyntheticImagesRandom(N)
     end
     
-    
+    -- Mix with deeper calls to this method
     if allowSubcalls and math.random() < 0.33 then
         --print("sub")
         local otherImages = createSyntheticImages(N, false)
         images = mixImageLists(images, otherImages)
     end
-    --print("done")
-    
-    --for i=1,#images do
-    --    image.display(images[i])
-    --    io.read()
-    --end
     
     return images
 end
