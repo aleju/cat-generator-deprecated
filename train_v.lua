@@ -300,13 +300,21 @@ function createSyntheticImages(N, allowSubcalls)
     return images
 end
 
+-- Mixes two images according to an overlay/mask.
+-- The overlay must be an image (2d tensor).
+-- Images and overlay must have the same sizes in y and x.
+-- Where values of the overlay are close to one, mostly image1 will be used.
+-- @param img1 Tensor (channel, height, width) of the first image.
+-- @param img2 Tensor (channel, height, width) of the second image.
+-- @param overlay Tensor (height, width) with values between 0 and 1
+--                or nil (to autogenerate a random overlay).
+-- @returns Tensor (channel, height, width)
 function mixImages(img1, img2, overlay)
     local img = torch.Tensor(IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3])
     img:zero()
     
     if overlay == nil then
         if math.random() < 0.5 then
-            --overlay = createGaussianOverlay(img1:size(2), img1:size(3), 400+math.random(900))
             overlay = getGaussianOverlay()
         else
             overlay = createPixelwiseOverlay(IMG_DIMENSIONS[2], IMG_DIMENSIONS[3])
@@ -318,31 +326,18 @@ function mixImages(img1, img2, overlay)
     img = overlay:clone():cmul(img1) + overlay:clone():mul(-1):add(1):cmul(img2)
     img:div(torch.max(img))
     
-    --image.display(img1)
-    --image.display(img2)
-    --image.display(overlay)
-    --image.display(img)
-    --io.read()
-    
-    --[[
-    for y=1,img1:size(2) do
-        for x=1,img1:size(3) do
-            for c=1,img1:size(1) do
-                img[c][y][x] = overlay[y][x] * img1[c][y][x] + (1 - overlay[y][x]) * img2[c][y][x]
-            end
-        end
-    end
-    --]]
-    
     return img
 end
 
+-- Applies mixImages to the pairs in two image lists.
+-- @param images1 List of images.
+-- @param images2 List of images.
+-- @returns List of mixed images
 function mixImageLists(images1, images2)
     local images = {}
     local overlay
     local p = math.random()
     if p < 0.5 then
-        --overlay = createGaussianOverlay(IMG_DIMENSIONS[2], IMG_DIMENSIONS[3], 400+math.random(900))
         overlay = getGaussianOverlay()
     else
         overlay = createPixelwiseOverlay(IMG_DIMENSIONS[2], IMG_DIMENSIONS[3])
@@ -355,6 +350,10 @@ function mixImageLists(images1, images2)
     return images
 end
 
+-- Creates N new images by mixing random images
+-- from the training set.
+-- @param N Number of images.
+-- @returns List of Tensors (channel, height, width)
 function createSyntheticImagesMix(N)
     local images = {}
     local img1 = {}
@@ -368,6 +367,10 @@ function createSyntheticImagesMix(N)
     return mixImageLists(img1, img2)
 end
 
+-- Creates N new images by randomly copy-pasting areas within
+-- random images from the training set
+-- @param N Number of images.
+-- @returns List of Tensors (channel, height, width)
 function createSyntheticImagesStamp(N)
     local images = {}
     
@@ -405,6 +408,12 @@ function createSyntheticImagesStamp(N)
     return images
 end
 
+-- Makes sure that given (y, x) coordinates are between 1 and maxY/maxX.
+-- @param y Y-Coordinate
+-- @param x X-Coordinate
+-- @param maxY Max value for Y-Coordinate
+-- @param maxX Max value for X-Coordinate
+-- @returns List {y, x}
 function withinImageCoords(y, x, maxY, maxX)
     y = y % maxY
     if y < 1 then
@@ -421,6 +430,10 @@ function withinImageCoords(y, x, maxY, maxX)
     return {y, x}
 end
 
+-- Creates N new images by randomly moving (warping) areas in random
+-- images from the training set.
+-- @param N Number of images.
+-- @returns List of (channel, height, width)
 function createSyntheticImagesWarp(N)
     local images = {}
     
@@ -458,6 +471,10 @@ function createSyntheticImagesWarp(N)
     return images
 end
 
+-- Creates N new images by randomly mixing gaussian overlays/masks in
+-- different color channels.
+-- @param N Number of images.
+-- @returns List of tensors (channel, height, width)
 function createSyntheticImagesRandom(N)
     local images = {}
     --local overlay1 = createGaussianOverlay(OPT.scale, OPT.scale, 2000, 10)
@@ -489,6 +506,9 @@ function createSyntheticImagesRandom(N)
     return images
 end
 
+-- Creates a new gaussian overlay/mask from a set of cached ones.
+-- @param blurSize Defined how blurry the "clouds" in the mask are.
+-- @returns Tensor (height, width)
 function getGaussianOverlay(blurSize)
     if blurSize == nil then blurSize = 4 end
     
@@ -519,6 +539,16 @@ function getGaussianOverlay(blurSize)
     return overlayResult
 end
 
+-- Creates a new gaussian overlay/mask.
+-- It performs a random walk on the image canvas, leaving white dots behind.
+-- It tends to walk around the same points and rarely jumps away to other
+-- places, creating clusters of points.
+-- The algorithm is pretty inefficient/slow.
+-- @param ySize Height of the mask.
+-- @param xSize Width of the mask.
+-- @param N_points How many steps of random walk to perform.
+-- @param blurSize How much to blur the result before returning it.
+-- @returns Tensor (height, width)
 function createGaussianOverlay(ySize, xSize, N_points, blurSize)
     N_points = N_points or 1000
     blurSize = blurSize or 6
@@ -586,6 +616,12 @@ function createGaussianOverlay(ySize, xSize, N_points, blurSize)
     return overlay
 end
 
+-- Creates an overlay/mask by going through the image line by line
+-- and setting pixels to random values between 0 and 1.
+-- Pixels that are next to each other tend to get more similar values.
+-- @param ySize Height of the mask.
+-- @param xSize Width of the mask.
+-- @returns Tensor (height, width)
 function createPixelwiseOverlay(ySize, xSize)
     local overlay = torch.Tensor(ySize, xSize)
     overlay:zero()
@@ -612,6 +648,10 @@ function createPixelwiseOverlay(ySize, xSize)
     return overlay
 end
 
+-- Makes sure that x is min_x <= x <= max_x.
+-- @param min_x Min value for x.
+-- @param max_x Max value for x.
+-- @returns x within given bounds
 function minmax(min_x, x, max_x)
     if x < min_x then
         return min_x
