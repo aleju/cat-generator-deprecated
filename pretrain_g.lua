@@ -54,8 +54,6 @@ if OPT.gpu then
 else
     require 'nn'
 end
-require 'dpnn'
-require 'LeakyReLU'
 torch.setdefaulttensortype('torch.FloatTensor')
 
 
@@ -76,6 +74,8 @@ function main()
     end
     ----------------------------------------------------------------------
     
+    -- Initialize G in autoencoder form
+    -- G is a Sequential that contains (1) G Encoder and (2) G Decoder (both again Sequentials)
     G_AUTOENCODER = MODELS.create_G_autoencoder(IMG_DIMENSIONS, OPT.noiseDim)
     
     if OPT.gpu then
@@ -89,6 +89,7 @@ function main()
     PARAMETERS_G_AUTOENCODER, GRAD_PARAMETERS_G_AUTOENCODER = G_AUTOENCODER:getParameters()
     OPTSTATE = {adam={}}
     
+    -- training loop
     EPOCH = 1
     while true do
         TRAIN_DATA = DATASET.loadRandomImages(OPT.N_epoch)
@@ -99,21 +100,26 @@ function main()
 end
 
 
-
+-- Train G (in autoencoder form) for one epoch
 function epoch()
     local startTime = sys.clock()
     local batchIdx = 0
     local trained = 0
+    -- minibatch loop
+    -- keep training until we have reached the requested number of samples per epoch
     while trained < OPT.N_epoch do
+        -- size of this batch, usually OPT.batchSize, may be smaller at the end 
         local thisBatchSize = math.min(OPT.batchSize, OPT.N_epoch - trained)
         local inputs = torch.Tensor(thisBatchSize, IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3])
         local targets = torch.Tensor(thisBatchSize, IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3])
         
+        -- as G is in autoencoder form, input (x) and target (y) are both the same image(s)
         for i=1,thisBatchSize do
             inputs[i] = TRAIN_DATA[i]:clone()
             targets[i] = TRAIN_DATA[i]:clone()
         end
         
+        -- evaluation function for G
         local fevalG = function(x)
             collectgarbage()
             if x ~= PARAMETERS_G_AUTOENCODER then PARAMETERS_G_AUTOENCODER:copy(x) end
@@ -144,6 +150,7 @@ function epoch()
             return f,GRAD_PARAMETERS_G_AUTOENCODER
         end
         
+        -- use Adam as optimizer
         optim.adam(fevalG, PARAMETERS_G_AUTOENCODER, OPTSTATE.adam)
         
         trained = trained + thisBatchSize
@@ -152,17 +159,20 @@ function epoch()
         xlua.progress(trained, OPT.N_epoch)
     end
     
+    -- Epoch has finished (all batches done)
+
+    -- Some outputs for this epoch
     local epochTime = sys.clock() - startTime
     print(string.format("<trainer> time required for this epoch = %d s", epochTime))
     print(string.format("<trainer> time to learn 1 sample = %f ms", 1000 * epochTime/OPT.N_epoch))
     print(string.format("<trainer> loss: %.4f", CRITERION.output))
-    
+
+    -- save the model    
     if EPOCH % OPT.saveFreq == 0 then
+        -- filename is "g_pretrained_CHANNELSxHEIGHTxWIDTH_NOISEDIM.net"
+        -- where NOISEDIM is equal to the size of layer between encoder and decoder (z)
         local filename = paths.concat(OPT.save, string.format('g_pretrained_%dx%dx%d_nd%d.net', IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3], OPT.noiseDim))
         os.execute(string.format("mkdir -p %s", sys.dirname(filename)))
-        --if paths.filep(filename) then
-        --    os.execute(string.format("mv %s %s.old", filename, filename))
-        --end
         print(string.format("<trainer> saving network to %s", filename))
         
         -- apparently something in the OPTSTATE is a CudaTensor, so saving it and then loading
@@ -174,19 +184,30 @@ function epoch()
     EPOCH = EPOCH + 1
 end
 
+-- Function to plot the current autoencoder training progress,
+-- i.e. show training images and images after encode-decode
 function visualizeProgress()
     -- deactivate dropout
     G_AUTOENCODER:evaluate()
     
+    -- This global static array will be used to save the loss function values
     if PLOT_DATA == nil then PLOT_DATA = {} end
     
+    -- Load some images
+    -- we will only test here on potential training images
     local imagesReal = DATASET.loadRandomImages(100)
+    -- Convert them to a tensor (instead of list of tensors),
+    -- :forward() and display (DISP) want that
     local imagesRealTensor = torch.Tensor(imagesReal:size(), IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3])
     for i=1,imagesReal:size() do imagesRealTensor[i] = imagesReal[i] end
     
+    -- encode-decode the images
     local imagesAfterG = G_AUTOENCODER:forward(imagesRealTensor)
+
+    -- log the loss of the last encode-decode
     table.insert(PLOT_DATA, {EPOCH, CRITERION.output})
     
+    -- display images, images after encode-decode, pot of loss function
     DISP.image(imagesRealTensor, {win=OPT.window+0, width=IMG_DIMENSIONS[3]*15, title="Original images (before Autoencoder) (EPOCH " .. EPOCH .. ")"})
     DISP.image(imagesAfterG, {win=OPT.window+1, width=IMG_DIMENSIONS[3]*15, title="Images after autoencoder G (EPOCH " .. EPOCH .. ")"})
     DISP.plot(PLOT_DATA, {win=OPT.window+2, labels={'epoch', 'G Loss'}, title='G Loss'})
