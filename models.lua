@@ -5,6 +5,10 @@ require 'LeakyReLU'
 
 local models = {}
 
+-- Creates the encoder part of G as an autoencoder.
+-- @param dimensions The dimensions of each image as {channels, height, width}.
+-- @param noiseDim Size of the hidden layer between encoder and decoder.
+-- @returns nn.Sequential
 function models.create_G_encoder(dimensions, noiseDim)
     local model = nn.Sequential()
     local activation = nn.LeakyReLU
@@ -32,6 +36,10 @@ function models.create_G_encoder(dimensions, noiseDim)
     return model
 end
 
+-- Creates the decoder part of G as an autoencoder.
+-- @param dimensions The dimensions of each image as {channels, height, width}.
+-- @param noiseDim Size of the hidden layer between encoder and decoder.
+-- @returns nn.Sequential
 function models.create_G_decoder(dimensions, noiseDim)
     local model = nn.Sequential()
     local activation = nn.PReLU
@@ -48,10 +56,18 @@ function models.create_G_decoder(dimensions, noiseDim)
     return model
 end
 
+-- Creates G, which is identical to the decoder part of G as an autoencoder.
+-- @param dimensions The dimensions of each image as {channels, height, width}.
+-- @param noiseDim Size of the hidden layer between encoder and decoder.
+-- @returns nn.Sequential
 function models.create_G(dimensions, noiseDim)
     return models.create_G_decoder(dimensions, noiseDim)
 end
 
+-- Creates the G as an autoencoder (encoder+decoder).
+-- @param dimensions The dimensions of each image as {channels, height, width}.
+-- @param noiseDim Size of the hidden layer between encoder and decoder.
+-- @returns nn.Sequential
 function models.create_G_autoencoder(dimensions, noiseDim)
     local model = nn.Sequential()
     model:add(models.create_G_encoder(dimensions, noiseDim))
@@ -59,54 +75,12 @@ function models.create_G_autoencoder(dimensions, noiseDim)
     return model
 end
 
+-- Creates V.
+-- @param dimensions The dimensions of each image as {channels, height, width}.
+-- @returns nn.Sequential
 function create_V(dimensions)
     local model = nn.Sequential()
     local activation = nn.LeakyReLU
-    
-    --[[
-    model:add(nn.SpatialConvolution(IMG_DIMENSIONS[1], 32, 3, 3, 1, 1, (3-1)/2))
-    model:add(activation())
-    model:add(nn.SpatialConvolution(32, 32, 3, 3, 1, 1, (3-1)/2))
-    model:add(activation())
-    model:add(nn.SpatialBatchNormalization(32))
-    model:add(nn.SpatialDropout())
-  
-    model:add(nn.SpatialConvolution(32, 64, 3, 3, 1, 1, (3-1)/2))
-    model:add(activation())
-    model:add(nn.SpatialConvolution(64, 64, 3, 3, 1, 1, (3-1)/2))
-    model:add(activation())
-    model:add(nn.SpatialMaxPooling(2, 2))
-    model:add(nn.SpatialBatchNormalization(64))
-    model:add(nn.SpatialDropout())
-    model:add(nn.View(64, 16 * 16))
-  
-    local parallel = nn.Parallel(2, 2)
-    for i=1,64 do
-        local lin = nn.Sequential()
-        lin:add(nn.Linear(16*16, 128))
-        lin:add(activation())
-        lin:add(nn.BatchNormalization(128))
-        lin:add(nn.Dropout())
-        lin:add(nn.Linear(128, 8))
-        lin:add(activation())
-        parallel:add(lin)
-    end
-    model:add(parallel)
-    model:add(nn.BatchNormalization(64*8))
-  
-    model:add(nn.Linear(64*8, 128))
-    model:add(activation())
-    model:add(nn.BatchNormalization(128))
-    model:add(nn.Dropout())
-  
-    model:add(nn.Linear(128, 128))
-    model:add(activation())
-    model:add(nn.BatchNormalization(128))
-    model:add(nn.Dropout())
-  
-    model:add(nn.Linear(128, 2))
-    model:add(nn.SoftMax())
-    --]]
   
     model:add(nn.SpatialConvolution(dimensions[1], 64, 3, 3, 1, 1, (3-1)/2))
     model:add(activation())
