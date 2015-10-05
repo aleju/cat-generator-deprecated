@@ -4,31 +4,47 @@ require 'paths'
 
 local dataset = {}
 
-dataset.dirs = {} -- '/media/aj/grab/ml/datasets/lfwcrop_grey/faces'
-dataset.fileExtension = "" --'pgm'
+-- load data from these directories
+dataset.dirs = {}
+-- load only images with these file extensions
+dataset.fileExtension = ""
 
+-- expected original height/width of images
 dataset.originalScale = 64
+-- desired height/width of images
 dataset.scale = 32
+-- desired channels of images (1=grayscale, 3=color)
 dataset.nbChannels = 1
 
+-- cache for filepaths to all images
 dataset.paths = nil
 
+-- Set directories to load images from
+-- @param dirs List of paths to directories
 function dataset.setDirs(dirs)
   dataset.dirs = dirs
 end
 
+-- Set file extension that images to load must have
+-- @param fileExtension the file extension of the images
 function dataset.setFileExtension(fileExtension)
   dataset.fileExtension = fileExtension
 end
 
+-- Desired height/width of the images (will be resized if necessary)
+-- @param scale The height/width of the images
 function dataset.setScale(scale)
   dataset.scale = scale
 end
 
+-- Set desired number of channels for the images (1=grayscale, 3=color)
+-- @param nbChannels The number of channels
 function dataset.setNbChannels(nbChannels)
   dataset.nbChannels = nbChannels
 end
 
+-- Loads the paths of all images in the defined files
+-- (with defined file extensions)
 function dataset.loadPaths()
     local files = {}
     local dirs = dataset.dirs
@@ -84,6 +100,10 @@ function dataset.loadImages(startAt, count)
 end
 --]]
 
+-- Loads a defined number of randomly selected images from
+-- the cached paths (cached in loadPaths()).
+-- @param count Number of random images.
+-- @return List of Tensors
 function dataset.loadRandomImages(count)
     --local images = dataset.loadRandomImagesFromDirs(dataset.dirs, dataset.fileExtension, count)
     local images = dataset.loadRandomImagesFromPaths(count)
@@ -109,6 +129,10 @@ function dataset.loadRandomImages(count)
     return result
 end
 
+-- Loads randomly selected images from the cached paths.
+-- TODO: merge with loadRandomImages()
+-- @param count Number of images to load
+-- @returns List of Tensors
 function dataset.loadRandomImagesFromPaths(count)
     if dataset.paths == nil then
         dataset.loadPaths()
