@@ -260,15 +260,6 @@ function adversarial.train(trainData, maxAccuracyD, accsInterval)
             else
                 print("[Warning] Unknown optimizer method chosen for D.")
             end
-            
-            --[[
-            if batchIdx % 4 == 0 then
-                interruptableAdagrad(fevalD, PARAMETERS_D, OPTSTATE.adagrad.D)
-            else
-                interruptableAdam(fevalD, PARAMETERS_D, OPTSTATE.adam.D)
-            end
-            --]]
-            --optim.rmsprop(fevalD, PARAMETERS_D, OPTSTATE.rmsprop.D)
         end -- end for K
 
         ---------------------------------------------------------------------
@@ -333,30 +324,16 @@ function adversarial.train(trainData, maxAccuracyD, accsInterval)
             else
                 print("[Warning] Unknown optimizer method chosen for G.")
             end
-            
-            --[[
-            if batchIdx % 4 == 0 then
-                interruptableAdagrad(fevalG_on_D, PARAMETERS_G, OPTSTATE.adagrad.G)
-            else
-                interruptableAdam(fevalG_on_D, PARAMETERS_G, OPTSTATE.adam.G)
-            end
-            --]]
-            --optim.rmsprop(fevalG_on_D, PARAMETERS_G, OPTSTATE.rmsprop.G)
         end
 
         batchIdx = batchIdx + 1
         -- display progress
-        xlua.progress(t, N_epoch)
+        xlua.progress(t+thisBatchSize, N_epoch)
         
         if OPT.weightsVisFreq > 0 and batchIdx % OPT.weightsVisFreq == 0 then
             adversarial.visualizeNetwork(MODEL_D)
         end
     end -- end for loop over dataset
-
-    -- fill out progress bar completely,
-    -- for some reason that doesn't happen in the previous loop
-    -- probably because it progresses to t instead of t+dataBatchSize
-    xlua.progress(N_epoch, N_epoch)
 
     -- time taken
     time = sys.clock() - time
@@ -364,10 +341,10 @@ function adversarial.train(trainData, maxAccuracyD, accsInterval)
     print(string.format("<trainer> time to learn 1 sample = %f ms", 1000 * time/N_epoch))
     print(string.format("<trainer> trained D %d of %d times.", countTrainedD, countTrainedD + countNotTrainedD))
     --print(string.format("<trainer> adam learning rate D:%.5f | G:%.5f", OPTSTATE.adam.D.learningRate, OPTSTATE.adam.G.learningRate))
-    print(string.format("<trainer> adam learning rate D increased:%d decreased:%d", count_lr_increased_D, count_lr_decreased_D))
+    --print(string.format("<trainer> adam learning rate D increased:%d decreased:%d", count_lr_increased_D, count_lr_decreased_D))
 
     -- print confusion matrix
-    print("Confusion of normal D:")
+    print("Confusion of D:")
     print(CONFUSION)
     local tV = CONFUSION.totalValid
     --TRAIN_LOGGER:add{['% mean class accuracy (train set)'] = tV * 100}
@@ -387,7 +364,7 @@ function adversarial.train(trainData, maxAccuracyD, accsInterval)
         --    tmp:remove(1)
         --end
         
-        torch.save(filename, {D = MODEL_D, G = MODEL_G, opt = OPT, optstate = OPTSTATE, epoch=EPOCH+1})
+        torch.save(filename, {D = MODEL_D, G = MODEL_G, opt = OPT, epoch=EPOCH+1}) --optstate = OPTSTATE, 
     end
 
     -- next epoch
@@ -396,44 +373,55 @@ function adversarial.train(trainData, maxAccuracyD, accsInterval)
     return tV
 end
 
-function adversarial.visualizeNetwork(net)
-    local minOutputs = 150
+-- Show the activity of a network in windows (i.e. windows full of blinking dots).
+-- The windows will automatically be reused.
+-- Only the activity of the layer types nn.SpatialConvolution and nn.Linear will be shown.
+-- Linear layers must have a minimum size to be shown (i.e. to not show the tiny output layers).
+--
+-- NOTE: This function can only visualize one network proberly while the program runs.
+-- I.e. you can't call this function to show network A and then another time to show network B,
+-- because the function tries to reuse windows and that will not work correctly in such a case.
+--
+-- @param net The network to visualize.
+-- @param minOutputs Minimum (output) size of a linear layer to be shown.
+function adversarial.visualizeNetwork(net, minOutputs)
+    if minOutputs == nil then
+        minOutputs = 150
+    end
     
+    -- (Global) Table to save the window ids in, so that we can reuse them between calls.
     netvis_windows = netvis_windows or {}
+    
     local modules = net:listModules()
     local winIdx = 1
     -- last module seems to have no output?
     for i=1,(#modules-1) do
         local t = torch.type(modules[i])
-        -- necessary, otherwise :get(i).output can somehow cause nil's
-        --if t == 'nn.SpatialConvolution' or t == 'nn.Linear' then
+        local showTensor = nil
+        -- This function only shows the activity of 2d convolutions and linear layers
+        if t == 'nn.SpatialConvolution' then
+            showTensor = modules[i].output[1]
+        elseif t == 'nn.Linear' then
             local output = modules[i].output
             local shape = output:size()
             local nbValues = shape[2]
-            local showTensor = nil
-            --print('i=', i, 't=', t, 'shape=', shape, '#shape=', #shape)
-            if t == 'nn.SpatialConvolution' then
-                showTensor = output[1]
-            elseif t == 'nn.Linear' then
-                if nbValues >= minOutputs and nbValues >= minOutputs then
-                    local nbRows = torch.floor(torch.sqrt(nbValues))
-                    while nbValues % nbRows ~= 0 and nbRows < nbValues do
-                        nbRows = nbRows + 1
-                    end
-                    
-                    if nbRows >= nbValues then
-                        showTensor = nil
-                    else
-                        showTensor = output[1]:view(nbRows, nbValues / nbRows)
-                    end
-                    --print('nbRows='..nbRows..', nbValues='..nbValues..', nbValues/nbRows=' .. (nbValues / nbRows))
+            
+            if nbValues >= minOutputs and nbValues >= minOutputs then
+                local nbRows = torch.floor(torch.sqrt(nbValues))
+                while nbValues % nbRows ~= 0 and nbRows < nbValues do
+                    nbRows = nbRows + 1
+                end
+                
+                if nbRows >= nbValues then
+                    showTensor = nil
+                else
+                    showTensor = output[1]:view(nbRows, nbValues / nbRows)
                 end
             end
-        --end
+        end
         
-        -- Is it a tensor? Linear(X, 1) is not and wont be displayed.
-        -- (Similarly probably for e.g. Linear(X, 10).)
-        --if #shape > 1 then
+        -- Show the layer outputs in a window
+        -- Note that windows are reused if possible
         if showTensor ~= nil then
             netvis_windows[winIdx] = image.display{
                 image=showTensor, zoom=1, nrow=32,
@@ -444,68 +432,6 @@ function adversarial.visualizeNetwork(net)
             winIdx = winIdx + 1
         end
     end
-
-    --[[
-    local offset = 1
-    win_w0 = image.display{
-        image=samples[1]:float(), zoom=1, nrow=32,
-        min=0, max=1,
-        win=win_w0, legend='Input', padding=1
-    }
-    --print(MODEL_D:get(1).weight:size())
-    --print(MODEL_D:get(1).output:size())
-    win_w1 = image.display{
-        --image=MODEL_D:get(1).weight[1], zoom=4, nrow=32,
-        image=MODEL_D:get(1+offset).output[1], zoom=4, nrow=32,
-        min=-1, max=1,
-        win=win_w1, legend='ConvLayer1 (32)', padding=1
-    }
-    --print(MODEL_D:get(3).weight:size())
-    win_w2 = image.display{
-        --image=MODEL_D:get(3).weight[1], zoom=4, nrow=32,
-        image=MODEL_D:get(3+offset).output[1], zoom=4, nrow=32,
-        min=-1, max=1,
-        win=win_w2, legend='ConvLayer2 (32)', padding=1
-    }
-    --print(MODEL_D:get(5).weight:size())
-    win_w3 = image.display{
-        --image=MODEL_D:get(5).weight[1], zoom=4, nrow=32,
-        image=MODEL_D:get(5+offset).output[1], zoom=2, nrow=32,
-        min=-1, max=1,
-        win=win_w3, legend='ConvLayer3 (64)', padding=1
-    }
-    --print(MODEL_D:get(7).weight:size())
-    win_w4 = image.display{
-        --image=MODEL_D:get(7).weight[1], zoom=4, nrow=32,
-        image=MODEL_D:get(7+offset).output[1], zoom=2, nrow=32,
-        min=-1, max=1,
-        win=win_w4, legend='ConvLayer4 (64)', padding=1
-    }
-    win_w5 = image.display{
-        --image=MODEL_D:get(7).weight[1], zoom=4, nrow=32,
-        image=MODEL_D:get(10+offset).output[1], zoom=2, nrow=32,
-        min=-1, max=1,
-        win=win_w5, legend='ConvLayer5 (128)', padding=1
-    }
-    win_w6 = image.display{
-        --image=MODEL_D:get(7).weight[1], zoom=4, nrow=32,
-        image=MODEL_D:get(12+offset).output[1], zoom=2, nrow=32,
-        min=-1, max=1,
-        win=win_w6, legend='ConvLayer6 (128)', padding=1
-    }
-    win_w7 = image.display{
-        --image=MODEL_D:get(7).weight[1], zoom=4, nrow=32,
-        image=MODEL_D:get(16+offset).output[1]:view(32, 32), zoom=4, nrow=32,
-        min=-1, max=1,
-        win=win_w7, legend='Dense 1 (1024)', padding=1
-    }
-    win_w8 = image.display{
-        --image=MODEL_D:get(7).weight[1], zoom=4, nrow=32,
-        image=MODEL_D:get(18+offset).output[1]:view(32, 32), zoom=4, nrow=32,
-        min=-1, max=1,
-        win=win_w8, legend='Dense 2 (1024)', padding=1
-    }
-    --]]
 end
 
 return adversarial
