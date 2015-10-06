@@ -86,7 +86,6 @@ if OPT.aws then
     DATASET.setDirs({"/mnt/datasets/out_faces_64x64", "/mnt/datasets/images_faces_aug"})
 else
     DATASET.setDirs({"/media/aj/ssd2a/ml/datasets/10k_cats/out_faces_64x64", "/media/aj/ssd2a/ml/datasets/flickr-cats/images_faces_aug"})
-    --DATASET.setDirs({"/media/aj/ssd2a/ml/datasets/10k_cats/out_faces_64x64"})
 end
 ----------------------------------------------------------------------
 
@@ -103,7 +102,6 @@ else
 end
 require 'dpnn'
 require 'LeakyReLU'
---require 'AddGaussianNoise'
 torch.setdefaulttensortype('torch.FloatTensor')
 
 ----------------------------------------------------------------------
@@ -297,8 +295,6 @@ else
       MODEL_G:add(nn.View(IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3]))
   end
   
-  --initializeWeights(MODEL_D)
-  --initializeWeights(MODEL_G)
   MODEL_D = require('weight-init')(MODEL_D, 'heuristic')
   MODEL_G = require('weight-init')(MODEL_G, 'heuristic')
 end
@@ -344,16 +340,6 @@ CRITERION = nn.BCECriterion()
 PARAMETERS_D, GRAD_PARAMETERS_D = MODEL_D:getParameters()
 PARAMETERS_G, GRAD_PARAMETERS_G = MODEL_G:getParameters()
 
--- print networks
---print("Autoencoder network:")
---print(MODEL_AE)
---print('Discriminator network:')
---print(MODEL_D)
---print('Generator network:')
---print(MODEL_G)
---print('Validator network:')
---print(MODEL_V)
-
 -- this matrix records the current confusion across classes
 CONFUSION = optim.ConfusionMatrix(CLASSES)
 
@@ -369,8 +355,6 @@ if OPTSTATE == nil or OPT.rebuildOptstate == 1 then
             G = { learningRate = 1e-3 * 3 }
         },
         adam = {
-            --D = {learningRate = 0.0005},
-            --G = {learningRate = 0.0010}
             D = {},
             G = {}
         },
@@ -390,10 +374,8 @@ VIS_NOISE_INPUTS = NN_UTILS.createNoiseInputs(100)
 
 -- training loop
 while true do
-    if EPOCH == 1 or EPOCH % 1 == 0 then
-        print('Loading new training data...')
-        TRAIN_DATA = DATASET.loadRandomImages(OPT.N_epoch * 1)
-    end
+    print('Loading new training data...')
+    TRAIN_DATA = DATASET.loadRandomImages(OPT.N_epoch)
 
     if OPT.plot then
         NN_UTILS.visualizeProgress(VIS_NOISE_INPUTS)
@@ -402,8 +384,4 @@ while true do
     end
 
     ADVERSARIAL.train(TRAIN_DATA, OPT.D_maxAcc, math.max(20, math.min(1000/OPT.batchSize, 250)))
-    
-    
-    
-    --OPTSTATE.adam.G.learningRate = OPTSTATE.adam.G.learningRate * 0.99
 end
