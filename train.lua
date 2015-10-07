@@ -9,6 +9,7 @@ if not ok then print('display not found. unable to plot') end
 ADVERSARIAL = require 'adversarial'
 DATASET = require 'dataset'
 NN_UTILS = require 'utils.nn_utils'
+MODELS = require 'models'
 
 
 ----------------------------------------------------------------------
@@ -100,7 +101,7 @@ if OPT.gpu then
 else
     require 'nn'
 end
-require 'dpnn'
+--require 'dpnn'
 require 'LeakyReLU'
 torch.setdefaulttensortype('torch.FloatTensor')
 
@@ -109,8 +110,12 @@ torch.setdefaulttensortype('torch.FloatTensor')
 ----------------------------------------------------------------------
 local tmp = torch.load(OPT.V_network)
 MODEL_V = tmp.V
-MODEL_V:evaluate()
+MODEL_V:evaluate() -- deactivate dropout
 
+-- Creates an average rating (0 to 1) for a list of images.
+-- 1 is best.
+-- @param images List of image tensors.
+-- @returns float
 function rateWithV(images)
     local imagesTensor
     local N
@@ -226,40 +231,7 @@ else
   MODEL_D = branch_conv
   --]]
   
-  
-  local activation = nn.PReLU
-  local branch_conv = nn.Sequential()
-  
-  --local parallel = nn.Parallel(2, 2)
-  local parallel = nn.Concat(2)
-  local submodel = nn.Sequential()
-  submodel:add(nn.Dropout(0.25))
-  submodel:add(nn.SpatialConvolution(IMG_DIMENSIONS[1], 64, 3, 3, 1, 1, (3-1)/2))
-  submodel:add(activation())
-  submodel:add(nn.SpatialConvolution(64, 64, 3, 3, 1, 1, (3-1)/2))
-  submodel:add(activation())
-  submodel:add(nn.SpatialAveragePooling(2, 2, 2, 2))
-  submodel:add(nn.SpatialConvolution(64, 128, 3, 3, 1, 1, (3-1)/2))
-  submodel:add(activation())
-  submodel:add(nn.SpatialConvolution(128, 128, 3, 3, 1, 1, (3-1)/2))
-  submodel:add(activation())
-  submodel:add(nn.SpatialDropout())
-  submodel:add(nn.SpatialAveragePooling(2, 2, 2, 2))
-  submodel:add(nn.View(128*8*8))
-  submodel:add(nn.Linear(128*8*8, 512))
-  submodel:add(activation())
-  submodel:add(nn.Dropout())
-  submodel:add(nn.Linear(512, 128))
-  submodel:add(activation())
-  parallel:add(submodel)
-  for i=2,4 do parallel:add(submodel:sharedClone()) end
-  
-  branch_conv:add(parallel)
-  branch_conv:add(nn.Dropout())
-  branch_conv:add(nn.Linear(128*4, 1))
-  branch_conv:add(nn.Sigmoid())
-  
-  MODEL_D = branch_conv
+  MODEL_D = MODELS.create_D(IMG_DIMENSIONS)
   
   --------------
   -- G
@@ -287,12 +259,7 @@ else
       MODEL_G:add(nn.CAddTable())
       MODEL_G:add(nn.View(IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3]))
   else
-      MODEL_G = nn.Sequential()
-      MODEL_G:add(nn.Linear(OPT.noiseDim, 2048))
-      MODEL_G:add(nn.PReLU())
-      MODEL_G:add(nn.Linear(2048, INPUT_SZ))
-      MODEL_G:add(nn.Sigmoid())
-      MODEL_G:add(nn.View(IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3]))
+      MODEL_G = MODELS.create_G(IMG_DIMENSIONS, opt.noiseDim)
   end
   
   MODEL_D = require('weight-init')(MODEL_D, 'heuristic')

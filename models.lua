@@ -1,7 +1,7 @@
 require 'torch'
 require 'nn'
 require 'LeakyReLU'
---require 'dpnn'
+require 'dpnn'
 
 local models = {}
 
@@ -73,6 +73,45 @@ function models.create_G_autoencoder(dimensions, noiseDim)
     model:add(models.create_G_encoder(dimensions, noiseDim))
     model:add(models.create_G_decoder(dimensions, noiseDim))
     return model
+end
+
+-- Creates the D
+-- @param dimensions The dimensions of each image as {channels, height, width}.
+-- @returns nn.Sequential
+function create_D(dimensions)
+    local activation = nn.PReLU
+    local branch_conv = nn.Sequential()
+  
+    --local parallel = nn.Parallel(2, 2)
+    local parallel = nn.Concat(2)
+    local submodel = nn.Sequential()
+    submodel:add(nn.Dropout(0.25))
+    submodel:add(nn.SpatialConvolution(IMG_DIMENSIONS[1], 64, 3, 3, 1, 1, (3-1)/2))
+    submodel:add(activation())
+    submodel:add(nn.SpatialConvolution(64, 64, 3, 3, 1, 1, (3-1)/2))
+    submodel:add(activation())
+    submodel:add(nn.SpatialAveragePooling(2, 2, 2, 2))
+    submodel:add(nn.SpatialConvolution(64, 128, 3, 3, 1, 1, (3-1)/2))
+    submodel:add(activation())
+    submodel:add(nn.SpatialConvolution(128, 128, 3, 3, 1, 1, (3-1)/2))
+    submodel:add(activation())
+    submodel:add(nn.SpatialDropout())
+    submodel:add(nn.SpatialAveragePooling(2, 2, 2, 2))
+    submodel:add(nn.View(128*8*8))
+    submodel:add(nn.Linear(128*8*8, 512))
+    submodel:add(activation())
+    submodel:add(nn.Dropout())
+    submodel:add(nn.Linear(512, 128))
+    submodel:add(activation())
+    parallel:add(submodel)
+    for i=2,4 do parallel:add(submodel:sharedClone()) end
+  
+    branch_conv:add(parallel)
+    branch_conv:add(nn.Dropout())
+    branch_conv:add(nn.Linear(128*4, 1))
+    branch_conv:add(nn.Sigmoid())
+
+    return branch_conv
 end
 
 -- Creates V.
