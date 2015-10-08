@@ -220,6 +220,7 @@ function nn_utils.switchToEvaluationMode()
 end
 
 
+-- Contains the pixels necessary to draw digits 0 to 9
 CHAR_TENSORS = {}
 CHAR_TENSORS[0] = torch.Tensor({{1, 1, 1},
                                 {1, 0, 1},
@@ -272,6 +273,12 @@ CHAR_TENSORS[9] = torch.Tensor({{1, 1, 1},
                                 {0, 0, 1},
                                 {1, 1, 1}})
 
+-- Converts a list of images to a grid of images that can be saved easily.
+-- @param images List of image tensors
+-- @param height Height of the grid
+-- @param width Width of the grid
+-- @param epoch The epoch number to draw at the bottom of the grid
+-- @returns tensor 
 function nn_utils.imagesToGridTensor(images, height, width, epoch)
     local imgHeightPx = IMG_DIMENSIONS[2]
     local imgWidthPx = IMG_DIMENSIONS[3]
@@ -318,29 +325,28 @@ function nn_utils.imagesToGridTensor(images, height, width, epoch)
     return grid
 end
 
+-- Saves the list of image to the provided filepath (as a grid image).
+-- @param filepath Save the grid image to that filepath
+-- @param images List of image tensors
+-- @param height Height of the grid
+-- @param width Width of the grid
+-- @param epoch The epoch number to draw at the bottom of the grid
+-- @returns tensor 
 function nn_utils.saveImagesAsGrid(filepath, images, height, width, epoch)
     local grid = nn_utils.imagesToGridTensor(images, height, width, epoch)
     os.execute(string.format("mkdir -p %s", sys.dirname(filepath)))
     image.save(filepath, grid)
 end
 
+-- Deactivates CUDA mode on a network and returns the result.
+-- Expects networks in CUDA mode to be a Sequential of the form
+-- [1] Copy layer [2] Sequential [3] Copy layer
+-- as created by activateCuda().
+-- @param net The network to deactivate CUDA mode on.
+-- @returns The CPU network
 function nn_utils.deactivateCuda(net)
     local newNet = net:clone()
     newNet:float()
-    --[[
-    if torch.type(newNet:get(1)) == 'nn.Copy' then
-        print("Removing (1)")
-        newNet:remove(1)
-    else
-        print(torch.type(newNet:get(1)))
-    end
-    if torch.type(newNet:get(#newNet:listModules())) == 'nn.Copy' then
-        print("Removing (last)")
-        newNet:remove(#newNet:listModules())
-    else
-        print(torch.type(newNet:get(#newNet:listModules())))
-    end
-    --]]
     if torch.type(newNet:get(1)) == 'nn.Copy' then
         return newNet:get(2)
     else
@@ -348,6 +354,11 @@ function nn_utils.deactivateCuda(net)
     end
 end
 
+-- Activates CUDA mode on a network and returns the result.
+-- This adds Copy layers at the start and end of the network.
+-- Expects the default tensor to be FloatTensor.
+-- @param net The network to activate CUDA mode on.
+-- @returns The CUDA network
 function nn_utils.activateCuda(net)
     local newNet = net:clone()
     newNet:cuda()
