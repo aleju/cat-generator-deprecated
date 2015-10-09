@@ -178,9 +178,9 @@ function nn_utils.visualizeProgress(noiseInputs)
     -- find good images (according to D) among the randomly generated ones
     local goodImages, _ = nn_utils.sortImagesByPrediction(randomImages, false, 50)
 
-    local semiRandomImagesRefinedRating = rateWithV(semiRandomImagesRefined)
-    local goodImagesRating = rateWithV(goodImages)
-    local badImagesRating = rateWithV(badImages)
+    local semiRandomImagesRefinedRating = nn_utils.rateWithV(semiRandomImagesRefined)
+    local goodImagesRating = nn_utils.rateWithV(goodImages)
+    local badImagesRating = nn_utils.rateWithV(badImages)
     table.insert(PLOT_DATA, {EPOCH, semiRandomImagesRefinedRating, goodImagesRating, badImagesRating})
 
     if semiRandomImagesUnrefined then
@@ -367,6 +367,37 @@ function nn_utils.activateCuda(net)
     tmp:add(newNet)
     tmp:add(nn.Copy('torch.CudaTensor', 'torch.FloatTensor'))
     return tmp
+end
+
+-- Creates an average rating (0 to 1) for a list of images.
+-- 1 is best.
+-- @param images List of image tensors.
+-- @returns float
+function nn_utils.rateWithV(images)
+    local imagesTensor
+    local N
+    if type(images) == 'table' then
+        N = #images
+        imagesTensor = torch.Tensor(N, IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3])
+        for i=1,N do
+            imagesTensor[i] = images[i]
+        end
+    else
+        N = images:size(1)
+        imagesTensor = images
+    end
+    
+    local predictions = MODEL_V:forward(imagesTensor)
+    local sm = 0
+    for i=1,N do
+        -- first neuron in V signals whether the image is fake (1=yes, 0=no)
+        sm = sm + predictions[i][1]
+    end
+    
+    local fakiness = sm / N
+    
+    -- higher values for better images
+    return (1 - fakiness)
 end
 
 return nn_utils
