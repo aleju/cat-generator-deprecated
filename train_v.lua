@@ -77,7 +77,6 @@ function main()
         DATASET.setDirs({"/mnt/datasets/out_faces_64x64", "/mnt/datasets/images_faces_aug"})
     else
         DATASET.setDirs({"/media/aj/ssd2a/ml/datasets/10k_cats/out_faces_64x64", "/media/aj/ssd2a/ml/datasets/flickr-cats/images_faces_aug"})
-        --DATASET.setDirs({"/media/aj/ssd2a/ml/datasets/10k_cats/out_faces_64x64"})
     end
     ----------------------------------------------------------------------
     
@@ -193,9 +192,6 @@ function epoch()
     if EPOCH % OPT.saveFreq == 0 then
         local filename = paths.concat(OPT.save, 'v.net')
         os.execute(string.format("mkdir -p %s", sys.dirname(filename)))
-        --if paths.filep(filename) then
-        --    os.execute(string.format("mv %s %s.old", filename, filename))
-        --end
         print(string.format("<trainer> saving network to %s", filename))
         
         -- apparently something in the OPTSTATE is a CudaTensor, so saving it and then loading
@@ -277,16 +273,12 @@ function createSyntheticImages(N, allowSubcalls)
     local images
     local p = math.random()
     if p < 1/4 then
-        --print("mix")
         images = createSyntheticImagesMix(N)
     elseif p >= 1/4 and p < 2/4 then
-        --print("warp")
         images = createSyntheticImagesWarp(N)
     elseif p >= 2/4 and p < 3/4 then
-        --print("stamp")
         images = createSyntheticImagesStamp(N)
     else
-        --print("random")
         images = createSyntheticImagesRandom(N)
     end
     

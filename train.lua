@@ -1,7 +1,5 @@
 require 'torch'
---require 'optim'
 require 'image'
---require 'datasets'
 require 'pl' -- this is somehow responsible for lapp working in qlua mode
 require 'paths'
 ok, DISP = pcall(require, 'display')
@@ -54,6 +52,7 @@ if OPT.gpu < 0 or OPT.gpu > 3 then OPT.gpu = false end
 print(OPT)
 
 -- fix seed
+math.randomseed(OPT.seed)
 torch.manualSeed(OPT.seed)
 
 -- threads
@@ -101,8 +100,6 @@ if OPT.gpu then
 else
     require 'nn'
 end
---require 'dpnn'
---require 'LeakyReLU'
 torch.setdefaulttensortype('torch.FloatTensor')
 
 
@@ -232,9 +229,6 @@ function main()
         else
             MODEL_G = MODELS.create_G(IMG_DIMENSIONS, opt.noiseDim)
         end
-  
-        MODEL_D = require('weight-init')(MODEL_D, 'heuristic')
-        MODEL_G = require('weight-init')(MODEL_G, 'heuristic')
     end
 
 

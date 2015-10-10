@@ -111,6 +111,8 @@ function create_D(dimensions)
     branch_conv:add(nn.Linear(128*4, 1))
     branch_conv:add(nn.Sigmoid())
 
+    branch_conv = require('weight-init')(branch_conv, 'heuristic')
+
     return branch_conv
 end
 
