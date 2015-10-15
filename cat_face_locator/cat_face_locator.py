@@ -13,7 +13,8 @@ from scipy import misc
 from skimage import color
 import numpy as np
 from keras.models import Sequential
-from keras.layers.core import Dense, Dropout, Activation, Reshape, TimeDistributedDense, RepeatVector, Flatten
+from keras.layers.core import Dense, Dropout, Activation, Reshape, TimeDistributedDense,
+                              RepeatVector, Flatten
 from keras.layers.advanced_activations import LeakyReLU
 from keras.optimizers import SGD, Adagrad, Adam
 from keras.utils.generic_utils import Progbar
@@ -32,7 +33,8 @@ random.seed(42)
 
 CURRENT_DIR = os.path.dirname(os.path.realpath(__file__))
 MAIN_DIR = "/media/aj/grab/ml/datasets/10k_cats"
-DIRS = [os.path.join(MAIN_DIR, subdir) for subdir in ["CAT_00", "CAT_01", "CAT_02", "CAT_03", "CAT_04", "CAT_05", "CAT_06"]]
+DIRS = [["CAT_00", "CAT_01", "CAT_02", "CAT_03", "CAT_04", "CAT_05", "CAT_06"]
+DIRS = [os.path.join(MAIN_DIR, subdir) for subdir in DIRS]
 VISUALIZE = False
 
 MODEL_IMAGE_HEIGHT = 64
@@ -67,8 +69,12 @@ def main():
         print("-----------_")
         print(image.shape)
         print(Y_train[i])
-        tl_y, tl_x, br_y, br_x = center_scale_to_pixels(image, Y_train[i][0], Y_train[i][1], Y_train[i][2], Y_train[i][3])
-        marked_image = visualize_rectangle(image*255, tl_x, br_x, tl_y, br_y, (255,), channel_is_first_axis=True)
+        tl_y, tl_x, br_y, br_x = center_scale_to_pixels(image,
+                                                        Y_train[i][0], Y_train[i][1],
+                                                        Y_train[i][2], Y_train[i][3])
+        marked_image = visualize_rectangle(image*255,
+                                           tl_x, br_x, tl_y, br_y, (255,),
+                                           channel_is_first_axis=True)
         misc.imshow(np.squeeze(marked_image))
     """
     
@@ -78,7 +84,8 @@ def main():
         print("Loading weights...")
         load_weights_seq(model, args.load)
 
-    model.fit(X_train, Y_train, batch_size=128, nb_epoch=50, validation_split=0.0, validation_data=(X_val, Y_val), show_accuracy=False)
+    model.fit(X_train, Y_train, batch_size=128, nb_epoch=50, validation_split=0.0,
+              validation_data=(X_val, Y_val), show_accuracy=False)
 
     print("Saving weights...")
     model.save_weights(SAVE_WEIGHTS_FILEPATH, overwrite=SAVE_AUTO_OVERWRITE)
@@ -89,9 +96,13 @@ def main():
         for img_idx, (tl_y, tl_x, br_y, br_x) in enumerate(y_preds):
             image = np.rollaxis(X_val[img_idx, ...], 0, 3)
             if GRAYSCALE:
-                image_marked = visualize_rectangle(image*255, tl_x, br_x, tl_y, br_y, (255,), channel_is_first_axis=False)
+                image_marked = visualize_rectangle(image*255,
+                                                   tl_x, br_x, tl_y, br_y, (255,),
+                                                   channel_is_first_axis=False)
             else:
-                image_marked = visualize_rectangle(image*255, tl_x, br_x, tl_y, br_y, (255,0,0), channel_is_first_axis=False)
+                image_marked = visualize_rectangle(image*255,
+                                                   tl_x, br_x, tl_y, br_y, (255,0,0),
+                                                   channel_is_first_axis=False)
             misc.imsave(os.path.join(SAVE_EXAMPLES_DIR, "%d.png" % (img_idx,)), np.squeeze(image_marked))
 
 def create_model_tiny(image_height, image_width, optimizer):
@@ -382,16 +393,28 @@ def get_image_with_rectangle(image_filepath, coords_filepath):
         image_marked = visualize_rectangle(image_marked, min_x, max_x, min_y, max_y, (0, 255, 0))
         
         # visualize 2nd rectangle in blue
-        image_marked = visualize_rectangle(image_marked, min_x_fcenter, max_x_fcenter, min_y_fcenter, max_y_fcenter, (0, 0, 255))
+        image_marked = visualize_rectangle(image_marked,
+                                           min_x_fcenter, max_x_fcenter,
+                                           min_y_fcenter, max_y_fcenter,
+                                           (0, 0, 255))
         
         # visualize 3rd rectangle in red
-        image_marked = visualize_rectangle(image_marked, min_x_half, max_x_half, min_y_half, max_y_half, (255, 0, 0))
+        image_marked = visualize_rectangle(image_marked,
+                                           min_x_half, max_x_half,
+                                           min_y_half, max_y_half,
+                                           (255, 0, 0))
         
         # visualize 4th rectangle in yellow
-        image_marked = visualize_rectangle(image_marked, min_x_merge, max_x_merge, min_y_merge, max_y_merge, (255, 255, 0))
+        image_marked = visualize_rectangle(image_marked,
+                                           min_x_merge, max_x_merge,
+                                           min_y_merge, max_y_merge,
+                                           (255, 255, 0))
             
         # visualize 5th rectangle in cyan
-        image_marked = visualize_rectangle(image_marked, min_x_merge_sq, max_x_merge_sq, min_y_merge_sq, max_y_merge_sq, (0, 255, 255))
+        image_marked = visualize_rectangle(image_marked,
+                                           min_x_merge_sq, max_x_merge_sq,
+                                           min_y_merge_sq, max_y_merge_sq,
+                                           (0, 255, 255))
 
         misc.imshow(image_marked)
     # -----------------------
@@ -468,13 +491,28 @@ def square_image(image):
     
     if pad_top > 0 or pad_bottom > 0 or pad_left > 0 or pad_right > 0:
         if GRAYSCALE:
-            image = np.pad(image, ((pad_top, pad_bottom), (pad_left, pad_right)), mode=str("median"))
+            image = np.pad(image,
+                           ((pad_top, pad_bottom), (pad_left, pad_right)),
+                           mode=str("median"))
         else:
-            image = np.pad(image, ((pad_top, pad_bottom), (pad_left, pad_right), (0, 0)), mode=str("median"))
+            image = np.pad(image,
+                           ((pad_top, pad_bottom), (pad_left, pad_right), (0, 0)),
+                           mode=str("median"))
 
     return image, (pad_top, pad_right, pad_bottom, pad_left)
 
 def get_examples(count, start_at=0, augmentations=0):
+    """Returns X and Y examples to train/test on.
+    Args:
+        count: Maximum number of different images to return (this will be increased by the
+               augmentation number, i.e. count=1 with augmentations=10 will return 10+1 examples).
+        start_at: Start index of the first example to return.
+        augmentations: How often each image will be augmented.
+    Returns:
+        (X, Y)
+        with X being a tensor of images
+        and Y being in array of rows [center x, center y, height/2, width/2] of each face rectangle.
+    """
     # low strength augmentation because we will not change the coordinates, so the image
     # should be kept mostly the same
     ia = ImageAugmenter(MODEL_IMAGE_HEIGHT, MODEL_IMAGE_WIDTH,
@@ -489,7 +527,8 @@ def get_examples(count, start_at=0, augmentations=0):
     labels = []
     for image_filepath in images_filepaths[start_at:start_at+count]:
         coords_filepath = "%s.cat" % (image_filepath,)
-        image, (center_y, center_x), (scale_y, scale_x) = get_image_with_rectangle(image_filepath, coords_filepath)
+        image, (center_y, center_x), (scale_y, scale_x) = get_image_with_rectangle(image_filepath,
+                                                                                   coords_filepath)
         # catch images with missing coordinates
         if image is not None:
             images.append(image / 255) # project pixel values to 0-1
@@ -505,7 +544,8 @@ def get_examples(count, start_at=0, augmentations=0):
                     else:
                         images_aug.append(image)
                         labels.append(y)
-                images_aug = ia.augment_batch(np.array(images_aug, dtype=np.uint8)) # also projects pixel values to 0-1
+                # also projects pixel values to 0-1
+                images_aug = ia.augment_batch(np.array(images_aug, dtype=np.uint8))
                 images.extend(images_aug)
     
     images = np.array(images, dtype=np.float32)
@@ -514,7 +554,22 @@ def get_examples(count, start_at=0, augmentations=0):
     return images, np.array(labels, dtype=np.float32)
 
 def center_scale_to_pixels(image, center_y, center_x, scale_y, scale_x):
-    y, x, height_half, width_half = (int(center_y*MODEL_IMAGE_HEIGHT), int(center_x*MODEL_IMAGE_HEIGHT), int(scale_y*MODEL_IMAGE_WIDTH), int(scale_x*MODEL_IMAGE_WIDTH))
+    """Converts the face rectangle position from [center x, center y, height/2, width/2] (all
+    relative to max x/y) to [topleft x, topleft y, bottomright x, bottomright y].
+    Args:
+        image: numpy array of the image of the face rectangle.
+        center_y: Y-coordinate of the face rectangle center, relative to max y.
+        center_x: X-coordinate of the face rectangle center, relative to max x.
+        scale_y: Half-height of the face rectangle, relative to max height.
+        scale_x: Half-width of the face rectangle, relative to max width.
+    Returns:
+        (topleft x, topleft y, bottomright x, bottomright y),
+        als exact pixel values (not relative to max values).
+    """
+    y, x, height_half, width_half = (int(center_y*MODEL_IMAGE_HEIGHT),
+                                     int(center_x*MODEL_IMAGE_HEIGHT),
+                                     int(scale_y*MODEL_IMAGE_WIDTH),
+                                     int(scale_x*MODEL_IMAGE_WIDTH))
     tl_y = y - height_half
     tl_x = x - width_half
     br_y = y + height_half
@@ -540,9 +595,21 @@ def center_scale_to_pixels(image, center_y, center_x, scale_y, scale_x):
     
     return tl_y, tl_x, br_y, br_x
 
-def visualize_rectangle(image, min_x, max_x, min_y, max_y, color_tuple, channel_is_first_axis=False):
+def visualize_rectangle(image, min_x, max_x, min_y, max_y, color_tuple,
+                        channel_is_first_axis=False):
+    """Draws a rectangle at given coordinates into the image.
+    Args:
+        image: The image onto which to paint (will be changed in-place).
+        min_x: Rectangle's top left x value.
+        max_x: Rectangle's bottom right x value.
+        min_y: Rectangle's top left y value.
+        max_y: Rectangle's bottom right y value.
+    Returns:
+        image
+    """
     if len(color_tuple) > 0 and GRAYSCALE:
-        print("[WARNING] got 3-channel color tuple in visualize_rectangle(), but grayscale is active.", color_tuple)
+        print("[WARNING] got 3-channel color tuple in visualize_rectangle(), " \
+              "but grayscale is active.", color_tuple)
         color_tuple = 255
     
     if channel_is_first_axis:
@@ -561,11 +628,19 @@ def visualize_rectangle(image, min_x, max_x, min_y, max_y, color_tuple, channel_
     return image
 
 def predict_on_images(model, images):
+    """Predicts the coordinates of face rectangles for given images.
+    Args:
+        model: The neural net model.
+        images: Numpy array of images.
+    Returns:
+        List of (topleft y, topleft x, bottomright y, bottomright x).
+    """
     y_preds_model = model.predict(images, batch_size=128)
     
     y_preds = []
     for i, y_pred in enumerate(y_preds_model):
-        tl_y, tl_x, br_y, br_x = center_scale_to_pixels(images[i], y_pred[0], y_pred[1], y_pred[2], y_pred[3])
+        tl_y, tl_x, br_y, br_x = center_scale_to_pixels(images[i], y_pred[0], y_pred[1], \
+                                                                   y_pred[2], y_pred[3])
         
         y_preds.append((tl_y, tl_x, br_y, br_x))
     return y_preds
