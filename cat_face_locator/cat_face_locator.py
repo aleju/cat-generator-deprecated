@@ -1,4 +1,21 @@
 # -*- coding: utf-8 -*-
+"""
+This file is used to train a convnet to recognize cat faces in images.
+Training is done with the "10k cats" dataset.
+The trained convnet expects every image to contain at least one cat.
+The trained convnet will only mark one face if there are multiple cats.
+
+How to train
+------------
+1. Download the 10k cats dataset from archive.org
+2. Extract it somewhere. It should contain the subdirectories CAT_00, CAT_01, ..., CAT_06.
+3. Change the constant "MAIN_DIR" further below to the directory of your 10k cats dataset.
+4. Start training with:
+    python train_cat_face_locator.py
+
+It will train by default for 50 epochs. You can later continue training for another 50 epochs with
+    python train_cat_face_locator.py --load="cat_face_locator.weights"
+"""
 from __future__ import absolute_import, division, print_function, unicode_literals
 import re
 import os
@@ -42,10 +59,18 @@ MODEL_IMAGE_WIDTH = 64
 GRAYSCALE = False
 SAVE_EXAMPLES = True
 SAVE_EXAMPLES_DIR = os.path.join(CURRENT_DIR, "examples")
-SAVE_WEIGHTS_FILEPATH = os.path.join(CURRENT_DIR, "cat-face-detector_tiny.weights")
+SAVE_WEIGHTS_FILEPATH = os.path.join(CURRENT_DIR, "cat_face_locator.weights")
 SAVE_AUTO_OVERWRITE = True
 
+N_TRAIN = 9400 # true training count is N_TRAIN + (N_TRAIN * N_AUGMENTATIONS_TRAIN)
+N_VAL = 512
+N_AUGMENTATIONS_TRAIN = 5
+N_AUGMENTATIONS_VAL = 1
+EPOCHS = 50
+
 def main():
+    """Main function. Trains the model, saves the weights, save some example images with marked
+    faces."""
     parser = argparse.ArgumentParser(description="Generate data for a word")
     parser.add_argument("--load", required=False, help="Reload weights from file")
     args = parser.parse_args()
@@ -54,8 +79,8 @@ def main():
     # i.e. at 5 augmentations per image 9400 + 5*9400 (original + augmented)
     n_train = 9400
     n_val = 512
-    X_train, Y_train = get_examples(n_train, augmentations=5)
-    X_val, Y_val = get_examples(n_val, start_at=n_train, augmentations=1)
+    X_train, Y_train = get_examples(N_TRAIN, augmentations=N_AUGMENTATIONS_TRAIN)
+    X_val, Y_val = get_examples(N_VAL, start_at=N_TRAIN, augmentations=N_AUGMENTATIONS_VAL)
     print("Collected examples:")
     print("X_train: ", X_train.shape)
     print("X_val:", X_val.shape)
@@ -78,13 +103,13 @@ def main():
         misc.imshow(np.squeeze(marked_image))
     """
     
-    model = create_model_tiny(MODEL_IMAGE_HEIGHT, MODEL_IMAGE_WIDTH, Adam())
+    model = create_model(MODEL_IMAGE_HEIGHT, MODEL_IMAGE_WIDTH, Adam())
     
     if args.load:
         print("Loading weights...")
         load_weights_seq(model, args.load)
 
-    model.fit(X_train, Y_train, batch_size=128, nb_epoch=50, validation_split=0.0,
+    model.fit(X_train, Y_train, batch_size=128, nb_epoch=EPOCHS, validation_split=0.0,
               validation_data=(X_val, Y_val), show_accuracy=False)
 
     print("Saving weights...")
@@ -103,7 +128,8 @@ def main():
                 image_marked = visualize_rectangle(image*255,
                                                    tl_x, br_x, tl_y, br_y, (255,0,0),
                                                    channel_is_first_axis=False)
-            misc.imsave(os.path.join(SAVE_EXAMPLES_DIR, "%d.png" % (img_idx,)), np.squeeze(image_marked))
+            misc.imsave(os.path.join(SAVE_EXAMPLES_DIR, "%d.png" % (img_idx,)),
+                        np.squeeze(image_marked))
 
 def create_model_tiny(image_height, image_width, optimizer):
     """Creates the tiny version of the cat face locator model.
@@ -291,11 +317,13 @@ def get_image_with_rectangle(image_filepath, coords_filepath):
         print("[WARNING] Either '%s' or '%s' could not be found" % (fp_img, fp_img_cat))
         return None, (None, None), (None, None)
     
+    # read the image
     filename = fp_img[fp_img.rfind("/")+1:]
     image = misc.imread(fp_img, flatten=GRAYSCALE)
     image_height = image.shape[0]
     image_width = image.shape[1]
     
+    # read the coordinates of eyes, mouth etc.
     coords_raw = open(fp_img_cat, "r").readlines()[0].strip().split(" ")
     coords_raw = [abs(int(coord)) for coord in coords_raw]
     coords = []
@@ -305,12 +333,14 @@ def get_image_with_rectangle(image_filepath, coords_filepath):
         pair = (x, y)
         coords.append(pair)
     
-    # coords: 0 = left eye, 1 = right eye, 2 = nose
+    # estimate face's center from coordinates
+    # important coords: 0 = left eye, 1 = right eye, 2 = nose
     face_center_x = (coords[0][0] + coords[1][0] + coords[2][0]) / 3
     face_center_y = (coords[0][1] + coords[1][1] + coords[2][1]) / 3
     face_center = (int(face_center_x), int(face_center_y))
     
-    # mark all coordinates
+    # mark all coordinates with dots
+    # the image will be shown further below (at next "if VISUALIZE")
     if VISUALIZE:
         image_marked = np.copy(image)
         for coord in coords:
@@ -471,8 +501,13 @@ def square_image(image):
     pad_left = 0
     pad_right = 0
     
+    # -------------------
+    # count how many columns and rows we have to add (at left/right or top/bottom)
     # loops here are inefficient, but easy to read
+    
+    # columns
     while image_width < image_height:
+        # alternate between adding a columns left or right
         if idx % 2 == 0:
             pad_left += 1
         else:
@@ -480,8 +515,10 @@ def square_image(image):
         image_width += 1
         idx += 1
     
+    # rows
     idx = 0
     while image_height < image_width:
+        # alternate top/bottom
         if idx % 2 == 0:
             pad_top += 1
         else:
@@ -489,6 +526,9 @@ def square_image(image):
         image_height += 1
         idx += 1
     
+    # -------------------
+    
+    # pad the image with columns / rows as counted above
     if pad_top > 0 or pad_bottom > 0 or pad_left > 0 or pad_right > 0:
         if GRAYSCALE:
             image = np.pad(image,
@@ -529,7 +569,8 @@ def get_examples(count, start_at=0, augmentations=0):
         coords_filepath = "%s.cat" % (image_filepath,)
         image, (center_y, center_x), (scale_y, scale_x) = get_image_with_rectangle(image_filepath,
                                                                                    coords_filepath)
-        # catch images with missing coordinates
+        # get_image_with_rectangle returns None if the coordinates file was not found,
+        # which is the case for one image in 10k cats dataset
         if image is not None:
             images.append(image / 255) # project pixel values to 0-1
             y = [center_y, center_x, scale_y, scale_x]
