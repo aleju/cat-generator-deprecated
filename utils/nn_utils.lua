@@ -93,7 +93,8 @@ function nn_utils.sortImagesByPrediction(images, ascending, nbMaxOut)
     
     local imagesWithPreds = {}
     for i=1,images:size(1) do
-        imagesWithPreds[i] = {images[i], predictions[i][1]}
+        --imagesWithPreds[i] = {images[i], predictions[i][1]}
+        table.insert(imagesWithPreds, {images[i], predictions[i][1]})
     end
     
     if ascending then

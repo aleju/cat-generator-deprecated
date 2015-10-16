@@ -190,13 +190,14 @@ function epoch()
     CONFUSION:zero()
     
     if EPOCH % OPT.saveFreq == 0 then
-        local filename = paths.concat(OPT.save, 'v.net')
+        local filename = paths.concat(OPT.save, string.format('v_%d_%d_%d.net', IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3]))
         os.execute(string.format("mkdir -p %s", sys.dirname(filename)))
         print(string.format("<trainer> saving network to %s", filename))
         
         -- apparently something in the OPTSTATE is a CudaTensor, so saving it and then loading
         -- in CPU mode would cause an error
-        torch.save(filename, {V=NN_UTILS.deactivateCuda(V), opt=OPT, EPOCH=EPOCH+1}) --, optstate=OPTSTATE
+        --torch.save(filename, {V=NN_UTILS.deactivateCuda(V), opt=OPT, EPOCH=EPOCH+1}) --, optstate=OPTSTATE
+        torch.save(filename, {V=V, opt=OPT, EPOCH=EPOCH+1})
     end
     
     EPOCH = EPOCH + 1
@@ -313,7 +314,7 @@ function mixImages(img1, img2, overlay)
         end
     end
     
-    overlay = torch.repeatTensor(overlay, 3, 1, 1)
+    overlay = torch.repeatTensor(overlay, IMG_DIMENSIONS[1], 1, 1)
     --    overlay * img1     + (1 - overlay) * img2
     img = overlay:clone():cmul(img1) + overlay:clone():mul(-1):add(1):cmul(img2)
     img:div(torch.max(img))

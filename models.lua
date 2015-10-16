@@ -78,7 +78,8 @@ end
 -- Creates the D
 -- @param dimensions The dimensions of each image as {channels, height, width}.
 -- @returns nn.Sequential
-function create_D(dimensions)
+--[[
+function models.create_D(dimensions)
     local activation = nn.PReLU
     local branch_conv = nn.Sequential()
   
@@ -86,7 +87,7 @@ function create_D(dimensions)
     local parallel = nn.Concat(2)
     local submodel = nn.Sequential()
     submodel:add(nn.Dropout(0.25))
-    submodel:add(nn.SpatialConvolution(IMG_DIMENSIONS[1], 64, 3, 3, 1, 1, (3-1)/2))
+    submodel:add(nn.SpatialConvolution(dimensions[1], 64, 3, 3, 1, 1, (3-1)/2))
     submodel:add(activation())
     submodel:add(nn.SpatialConvolution(64, 64, 3, 3, 1, 1, (3-1)/2))
     submodel:add(activation())
@@ -97,8 +98,8 @@ function create_D(dimensions)
     submodel:add(activation())
     submodel:add(nn.SpatialDropout())
     submodel:add(nn.SpatialAveragePooling(2, 2, 2, 2))
-    submodel:add(nn.View(128*8*8))
-    submodel:add(nn.Linear(128*8*8, 512))
+    submodel:add(nn.View(128 * (1/4)*(1/4) * dimensions[2] * dimensions[3]))
+    submodel:add(nn.Linear(128 * (1/4)*(1/4) * dimensions[2] * dimensions[3], 512))
     submodel:add(activation())
     submodel:add(nn.Dropout())
     submodel:add(nn.Linear(512, 128))
@@ -115,11 +116,38 @@ function create_D(dimensions)
 
     return branch_conv
 end
+--]]
+
+function models.create_D(dimensions)
+    local conv = nn.Sequential()
+    conv:add(nn.SpatialConvolution(dimensions[1], 32, 3, 3, 1, 1, (3-1)/2))
+    conv:add(nn.PReLU())
+    conv:add(nn.SpatialConvolution(32, 32, 3, 3, 1, 1, (3-1)/2))
+    conv:add(nn.PReLU())
+    conv:add(nn.SpatialConvolution(32, 1024, 3, 3, 1, 1, (3-1)/2))
+    conv:add(nn.PReLU())
+    conv:add(nn.SpatialConvolution(1024, 64, 3, 3, 1, 1, (3-1)/2))
+    conv:add(nn.PReLU())
+    conv:add(nn.SpatialDropout())
+    conv:add(nn.View(64 * dimensions[2] * dimensions[3]))
+    conv:add(nn.Linear(64 * dimensions[2] * dimensions[3], 1024))
+    conv:add(nn.PReLU())
+    conv:add(nn.Dropout())
+    conv:add(nn.Linear(1024, 1024))
+    conv:add(nn.PReLU())
+    conv:add(nn.Dropout())
+    conv:add(nn.Linear(1024, 1))
+    conv:add(nn.Sigmoid())
+
+    conv = require('weight-init')(conv, 'heuristic')
+
+    return conv
+end
 
 -- Creates V.
 -- @param dimensions The dimensions of each image as {channels, height, width}.
 -- @returns nn.Sequential
-function create_V(dimensions)
+function models.create_V(dimensions)
     local model = nn.Sequential()
     local activation = nn.LeakyReLU
   
@@ -127,7 +155,7 @@ function create_V(dimensions)
     model:add(activation())
     model:add(nn.SpatialConvolution(64, 64, 3, 3, 1, 1, (3-1)/2))
     model:add(activation())
-    model:add(nn.SpatialMaxPooling(2, 2))
+    --model:add(nn.SpatialMaxPooling(2, 2))
     model:add(nn.SpatialBatchNormalization(64))
     model:add(nn.Dropout())
   
@@ -138,10 +166,11 @@ function create_V(dimensions)
     model:add(nn.SpatialMaxPooling(2, 2))
     model:add(nn.SpatialBatchNormalization(128))
     model:add(nn.SpatialDropout())
-    model:add(nn.View(128 * 0.25 * dimensions[2] * dimensions[3]))
-    model:add(nn.BatchNormalization(128 * 0.25 * dimensions[2] * dimensions[3]))
+    local imgSize = 0.25 * dimensions[2] * dimensions[3]
+    model:add(nn.View(128 * imgSize))
+    model:add(nn.BatchNormalization(128 * imgSize))
   
-    model:add(nn.Linear(128*8*8, 1024))
+    model:add(nn.Linear(128 * imgSize, 1024))
     model:add(activation())
     model:add(nn.BatchNormalization(1024))
     model:add(nn.Dropout())

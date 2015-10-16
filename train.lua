@@ -16,7 +16,7 @@ OPT = lapp[[
   -s,--save          (default "logs")       subdirectory to save logs
   --saveFreq         (default 10)           save every saveFreq epochs
   -n,--network       (default "")           reload pretrained network
-  --V_network        (default "logs/v.net") Location of V
+  --V_dir            (default "logs")       Directory where V networks are saved
   -p,--plot                                 plot while training
   --SGD_lr           (default 0.02)         SGD learning rate
   -b,--batchSize     (default 16)           batch size
@@ -90,15 +90,14 @@ end
 ----------------------------------------------------------------------
 
 -- run on gpu if chosen
+print("<trainer> starting gpu support...")
+require 'nn'
+require 'cutorch'
+require 'cunn'
 if OPT.gpu then
-    print("<trainer> starting gpu support...")
-    require 'cutorch'
-    require 'cunn'
     cutorch.setDevice(OPT.gpu + 1)
     cutorch.manualSeed(OPT.seed)
     print(string.format("<trainer> using gpu device %d", OPT.gpu))
-else
-    require 'nn'
 end
 torch.setdefaulttensortype('torch.FloatTensor')
 
@@ -107,8 +106,10 @@ function main()
     ----------------------------------------------------------------------
     -- Load / Define network
     ----------------------------------------------------------------------
-    local tmp = torch.load(OPT.V_network)
+    local filename = paths.concat(OPT.V_dir, string.format('v_%d_%d_%d.net', IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3]))
+    local tmp = torch.load(filename)
     MODEL_V = tmp.V
+    MODEL_V:float()
     MODEL_V:evaluate() -- deactivate dropout
 
     -- load previous networks (D and G)
@@ -120,6 +121,11 @@ function main()
         MODEL_G = tmp.G
         OPTSTATE = tmp.optstate
         EPOCH = tmp.epoch
+        
+        if OPT.gpu ~= false then
+            MODEL_D:float()
+            MODEL_G:float()
+        end
     else
         --------------
         -- D
@@ -227,7 +233,7 @@ function main()
             MODEL_G:add(nn.CAddTable())
             MODEL_G:add(nn.View(IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3]))
         else
-            MODEL_G = MODELS.create_G(IMG_DIMENSIONS, opt.noiseDim)
+            MODEL_G = MODELS.create_G(IMG_DIMENSIONS, OPT.noiseDim)
         end
     end
 
