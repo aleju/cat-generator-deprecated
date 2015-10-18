@@ -165,7 +165,7 @@ function epoch()
     local epochTime = sys.clock() - startTime
     print(string.format("<trainer> time required for this epoch = %d s", epochTime))
     print(string.format("<trainer> time to learn 1 sample = %f ms", 1000 * epochTime/OPT.N_epoch))
-    print(string.format("<trainer> loss: %.4f", CRITERION.output))
+    print(string.format("<trainer> last batch loss: %.4f", CRITERION.output))
 
     -- save the model    
     if EPOCH % OPT.saveFreq == 0 then
@@ -178,7 +178,11 @@ function epoch()
         -- apparently something in the OPTSTATE is a CudaTensor, so saving it and then loading
         -- in CPU mode would cause an error
         -- :get(2) means here "get the decoder part of the autoencoder, dont save the encoder"
-        torch.save(filename, {G=NN_UTILS.deactivateCuda(G_AUTOENCODER):get(2), opt=OPT, EPOCH=EPOCH+1}) --, optstate=OPTSTATE
+        --torch.save(filename, {G=NN_UTILS.deactivateCuda(G_AUTOENCODER):get(2), opt=OPT, EPOCH=EPOCH+1}) --, optstate=OPTSTATE
+        local G2 = G_AUTOENCODER:clone()
+        G2:float()
+        G2 = NN_UTILS.deactivateCuda(G2)
+        torch.save(filename, {G=G2:get(2), opt=OPT, EPOCH=EPOCH+1})
     end
     
     EPOCH = EPOCH + 1

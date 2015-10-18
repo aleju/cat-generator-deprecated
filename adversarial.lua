@@ -315,7 +315,7 @@ function adversarial.train(trainData, maxAccuracyD, accsInterval)
             
             --optim.sgd(fevalG_on_D, parameters_G, OPTSTATE.sgd.G)
             --optim.adagrad(fevalG_on_D, parameters_G, ADAGRAD_STATE_G)
-            if OPT.G_optmethod == "adagrad" then
+            if OPT.G_optmethod == "sgd" then
                 interruptableSgd(fevalG_on_D, PARAMETERS_G, OPTSTATE.sgd.G)
             elseif OPT.G_optmethod == "adagrad" then
                 interruptableAdagrad(fevalG_on_D, PARAMETERS_G, OPTSTATE.adagrad.G)

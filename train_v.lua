@@ -190,7 +190,7 @@ function epoch()
     CONFUSION:zero()
     
     if EPOCH % OPT.saveFreq == 0 then
-        local filename = paths.concat(OPT.save, string.format('v_%d_%d_%d.net', IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3]))
+        local filename = paths.concat(OPT.save, string.format('v_%dx%dx%d.net', IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3]))
         os.execute(string.format("mkdir -p %s", sys.dirname(filename)))
         print(string.format("<trainer> saving network to %s", filename))
         

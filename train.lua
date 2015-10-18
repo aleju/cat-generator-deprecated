@@ -14,13 +14,16 @@ MODELS = require 'models'
 -- parse command-line options
 OPT = lapp[[
   -s,--save          (default "logs")       subdirectory to save logs
-  --saveFreq         (default 10)           save every saveFreq epochs
+  --saveFreq         (default 30)           save every saveFreq epochs
   -n,--network       (default "")           reload pretrained network
   --V_dir            (default "logs")       Directory where V networks are saved
+  --G_pretrained_dir (default "logs")
   -p,--plot                                 plot while training
-  --SGD_lr           (default 0.02)         SGD learning rate
+  --D_sgd_lr         (default 0.02)         D SGD learning rate
+  --G_sgd_lr         (default 0.02)         G SGD learning rate
+  --D_sgd_momentum   (default 0)            D SGD momentum
+  --G_sgd_momentum   (default 0)            G SGD momentum
   -b,--batchSize     (default 16)           batch size
-  --SGD_momentum     (default 0)            SGD momentum
   --N_epoch          (default 1000)         Number of examples per epoch (-1 means all)
   --G_L1             (default 0)            L1 penalty on the weights of G
   --G_L2             (default 0e-6)         L2 penalty on the weights of G
@@ -106,7 +109,7 @@ function main()
     ----------------------------------------------------------------------
     -- Load / Define network
     ----------------------------------------------------------------------
-    local filename = paths.concat(OPT.V_dir, string.format('v_%d_%d_%d.net', IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3]))
+    local filename = paths.concat(OPT.V_dir, string.format('v_%dx%dx%d.net', IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3]))
     local tmp = torch.load(filename)
     MODEL_V = tmp.V
     MODEL_V:float()
@@ -210,30 +213,39 @@ function main()
         --------------
         -- G
         --------------
-        if OPT.autoencoder ~= "" then
-            local left = nn.Sequential()
-            left:add(nn.View(INPUT_SZ))
-            local right = nn.Sequential()
-            right:add(nn.View(INPUT_SZ))
-            right:add(nn.Linear(INPUT_SZ, 1024))
-            right:add(nn.PReLU())
-            right:add(nn.BatchNormalization(1024))
-            right:add(nn.Linear(1024, 1024))
-            right:add(nn.PReLU())
-            right:add(nn.BatchNormalization(1024))
-            right:add(nn.Linear(1024, INPUT_SZ))
-            right:add(nn.Tanh())
-            right:add(nn.MulConstant(0.25))
-      
-            local concat = nn.ConcatTable()
-            concat:add(left)
-            concat:add(right)
-            MODEL_G = nn.Sequential()
-            MODEL_G:add(concat)
-            MODEL_G:add(nn.CAddTable())
-            MODEL_G:add(nn.View(IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3]))
+        local g_pt_filename = paths.concat(OPT.G_pretrained_dir, string.format('g_pretrained_%dx%dx%d_nd%d.net', IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3], OPT.noiseDim))
+        if paths.filep(g_pt_filename) then
+            print("<trainer> loading pretrained G...")
+            local tmp = torch.load(g_pt_filename)
+            MODEL_G = tmp.G
+            MODEL_G:float()
         else
-            MODEL_G = MODELS.create_G(IMG_DIMENSIONS, OPT.noiseDim)
+            print("<trainer> Note: Did not find pretrained G")
+            if OPT.autoencoder ~= "" then
+                local left = nn.Sequential()
+                left:add(nn.View(INPUT_SZ))
+                local right = nn.Sequential()
+                right:add(nn.View(INPUT_SZ))
+                right:add(nn.Linear(INPUT_SZ, 1024))
+                right:add(nn.PReLU())
+                right:add(nn.BatchNormalization(1024))
+                right:add(nn.Linear(1024, 1024))
+                right:add(nn.PReLU())
+                right:add(nn.BatchNormalization(1024))
+                right:add(nn.Linear(1024, INPUT_SZ))
+                right:add(nn.Tanh())
+                right:add(nn.MulConstant(0.25))
+          
+                local concat = nn.ConcatTable()
+                concat:add(left)
+                concat:add(right)
+                MODEL_G = nn.Sequential()
+                MODEL_G:add(concat)
+                MODEL_G:add(nn.CAddTable())
+                MODEL_G:add(nn.View(IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3]))
+            else
+                MODEL_G = MODELS.create_G(IMG_DIMENSIONS, OPT.noiseDim)
+            end
         end
     end
 
@@ -299,8 +311,8 @@ function main()
             },
             rmsprop = {D = {}, G = {}},
             sgd = {
-                D = {learningRate = OPT.SGD_lr, momentum = OPT.SGD_momentum},
-                G = {learningRate = OPT.SGD_lr, momentum = OPT.SGD_momentum}
+                D = {learningRate = OPT.D_sgd_lr, momentum = OPT.D_sgd_momentum},
+                G = {learningRate = OPT.G_sgd_lr, momentum = OPT.G_sgd_momentum}
             }
         }
     end

@@ -84,6 +84,10 @@ function dataset.loadRandomImages(count)
         data[i] = image.scale(images[i], dataset.scale, dataset.scale)
     end
 
+    --local ker = torch.ones(3)
+    --local m = nn.SpatialSubtractiveNormalization(1, ker)
+    --data = m:forward(data)
+
     local N = data:size(1)
     local result = {}
     result.scaled = data
