@@ -10,7 +10,7 @@ NN_UTILS = require 'utils.nn_utils'
 MODELS = require 'models'
 
 OPT = lapp[[
-    --save          (default "logs")
+    --save          (default "losgs")
     --batchSize     (default 128)
     --noplot                            Whether to not plot
     --window        (default 13)
@@ -97,7 +97,9 @@ function main()
         TRAIN_DATA = DATASET.loadRandomImages(OPT.N_epoch)
         print(string.format("<trainer> Epoch %d", EPOCH))
         epoch(V)
-        visualizeProgress()
+        if not OPT.noplot then
+            visualizeProgress()
+        end
     end
 end
 

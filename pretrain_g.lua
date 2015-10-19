@@ -95,7 +95,9 @@ function main()
         TRAIN_DATA = DATASET.loadRandomImages(OPT.N_epoch)
         print(string.format("<trainer> Epoch %d", EPOCH))
         epoch()
-        visualizeProgress()
+        if not OPT.noplot then
+            visualizeProgress()
+        end
     end
 end
 

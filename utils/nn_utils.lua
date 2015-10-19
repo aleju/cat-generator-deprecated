@@ -137,7 +137,11 @@ function nn_utils.visualizeProgress(noiseInputs)
     end
     local semiRandomImagesRefined = nn_utils.createImagesFromNoise(noiseInputs, true, true)
     
-    --if OPT.gpu then semiRandomImagesRefined = semiRandomImagesRefined:float() end
+    for i=1,#semiRandomImagesRefined do
+        if semiRandomImagesRefined[i]:ne(semiRandomImagesRefined[i]):sum() > 0 then
+            print(string.format("[nn_utils vizProgress] Generated image %d contains NaNs", i))
+        end
+    end
     
     -- Generate a synthetic test image as sanity test
     -- This should be deemed very bad by D
@@ -191,8 +195,8 @@ function nn_utils.visualizeProgress(noiseInputs)
     DISP.image(goodImages, {win=OPT.window+2, width=IMG_DIMENSIONS[3]*15, title="best samples (first is best)"})
     DISP.image(badImages, {win=OPT.window+3, width=IMG_DIMENSIONS[3]*15, title="worst samples (first is worst)"})
     DISP.image(trainImages, {win=OPT.window+4, width=IMG_DIMENSIONS[3]*15, title="original images from training set"})
-    DISP.plot(PLOT_DATA, {win=OPT.window+5, labels={'epoch', 'V(semiRandom)', 'V(goodImages)', 'V(badImages)'}, title='Rating by V'})
     print(string.format("<nnutils viz> [V] semiRandom: %.4f, goodImages: %.4f, badImages: %.4f", semiRandomImagesRefinedRating, goodImagesRating, badImagesRating))
+    DISP.plot(PLOT_DATA, {win=OPT.window+5, labels={'epoch', 'V(semiRandom)', 'V(goodImages)', 'V(badImages)'}, title='Rating by V'})
     
     nn_utils.saveImagesAsGrid(string.format("%s/images/%d_%05d.png", OPT.save, START_TIME, EPOCH), semiRandomImagesRefined, 10, 10, EPOCH)
     nn_utils.saveImagesAsGrid(string.format("%s/images_good/%d_%05d.png", OPT.save, START_TIME, EPOCH), goodImages, 7, 7, EPOCH)

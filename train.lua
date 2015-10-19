@@ -89,6 +89,7 @@ if OPT.aws then
     DATASET.setDirs({"/mnt/datasets/out_faces_64x64", "/mnt/datasets/images_faces_aug"})
 else
     DATASET.setDirs({"/media/aj/ssd2a/ml/datasets/10k_cats/out_faces_64x64", "/media/aj/ssd2a/ml/datasets/flickr-cats/images_faces_aug"})
+    --DATASET.setDirs({"/media/aj/ssd2a/ml/datasets/10k_cats/out_faces_unaug_64x64"})
 end
 ----------------------------------------------------------------------
 
@@ -113,7 +114,7 @@ function main()
     local tmp = torch.load(filename)
     MODEL_V = tmp.V
     MODEL_V:float()
-    MODEL_V:evaluate() -- deactivate dropout
+    --MODEL_V:evaluate() -- deactivate dropout, off because NaNs when on?!
 
     -- load previous networks (D and G)
     -- or initialize them new
@@ -219,6 +220,7 @@ function main()
             local tmp = torch.load(g_pt_filename)
             MODEL_G = tmp.G
             MODEL_G:float()
+            print(MODEL_G)
         else
             print("<trainer> Note: Did not find pretrained G")
             if OPT.autoencoder ~= "" then

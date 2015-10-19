@@ -77,8 +77,6 @@ def main():
     
     # numbers here will be increased by augmentations,
     # i.e. at 5 augmentations per image 9400 + 5*9400 (original + augmented)
-    n_train = 9400
-    n_val = 512
     X_train, Y_train = get_examples(N_TRAIN, augmentations=N_AUGMENTATIONS_TRAIN)
     X_val, Y_val = get_examples(N_VAL, start_at=N_TRAIN, augmentations=N_AUGMENTATIONS_VAL)
     print("Collected examples:")

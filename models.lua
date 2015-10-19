@@ -45,7 +45,9 @@ function models.create_G_decoder(dimensions, noiseDim)
     local activation = nn.PReLU
   
     model = nn.Sequential()
-    model:add(nn.Linear(noiseDim, 2048))
+    model:add(nn.Linear(noiseDim, 512))
+    model:add(activation())
+    model:add(nn.Linear(512, 2048))
     model:add(activation())
     model:add(nn.Linear(2048, INPUT_SZ))
     model:add(nn.Sigmoid())
@@ -178,8 +180,8 @@ function models.create_D(dimensions)
 end
 --]]
 
---[[
 -- D1
+--[[
 function models.create_D(dimensions)
     local conv = nn.Sequential()
     conv:add(nn.SpatialConvolution(dimensions[1], 128, 3, 3, 1, 1, (3-1)/2))
@@ -208,6 +210,35 @@ function models.create_D(dimensions)
     return conv
 end
 --]]
+
+-- D1b
+function models.create_D(dimensions)
+    local conv = nn.Sequential()
+    conv:add(nn.SpatialConvolution(dimensions[1], 128, 3, 3, 1, 1, (3-1)/2))
+    conv:add(nn.PReLU())
+    conv:add(nn.SpatialConvolution(128, 128, 3, 3, 1, 1, (3-1)/2))
+    conv:add(nn.PReLU())
+    conv:add(nn.SpatialMaxPooling(2, 2))
+    conv:add(nn.SpatialConvolution(128, 256, 3, 3, 1, 1, (3-1)/2))
+    conv:add(nn.PReLU())
+    conv:add(nn.SpatialConvolution(256, 1024, 3, 3, 1, 1, (3-1)/2))
+    conv:add(nn.PReLU())
+    conv:add(nn.SpatialMaxPooling(2, 2))
+    conv:add(nn.SpatialDropout())
+    conv:add(nn.View(1024 * (1/4)*(1/4) * dimensions[2] * dimensions[3]))
+    conv:add(nn.Linear(1024 * (1/4)*(1/4) * dimensions[2] * dimensions[3], 1024))
+    conv:add(nn.PReLU())
+    conv:add(nn.Dropout())
+    conv:add(nn.Linear(1024, 1024))
+    conv:add(nn.PReLU())
+    conv:add(nn.Dropout())
+    conv:add(nn.Linear(1024, 1))
+    conv:add(nn.Sigmoid())
+
+    conv = require('weight-init')(conv, 'heuristic')
+
+    return conv
+end
 
 -- D2
 --[[
@@ -242,6 +273,7 @@ end
 --]]
 
 -- D3
+--[[
 function models.create_D(dimensions)
     require 'dpnn'
     
@@ -301,6 +333,7 @@ function models.create_D(dimensions)
 
     return conv
 end
+--]]
 
 --[[
 function models.create_D(dimensions)
@@ -365,6 +398,8 @@ function models.create_V(dimensions)
     local model = nn.Sequential()
     local activation = nn.LeakyReLU
   
+    --model:add(nn.Dropout(0.25))
+    --model:add(nn.WhiteNoise(0.0, 0.05))
     model:add(nn.SpatialConvolution(dimensions[1], 128, 3, 3, 1, 1, (3-1)/2))
     model:add(activation())
     model:add(nn.SpatialConvolution(128, 128, 3, 3, 1, 1, (3-1)/2))
@@ -376,22 +411,21 @@ function models.create_V(dimensions)
     model:add(nn.SpatialConvolution(128, 256, 3, 3, 1, 1, (3-1)/2))
     model:add(activation())
     model:add(nn.SpatialConvolution(256, 256, 3, 3, 1, 1, (3-1)/2))
+    model:add(nn.SpatialBatchNormalization(256))
     model:add(activation())
     model:add(nn.SpatialMaxPooling(2, 2))
-    model:add(nn.SpatialBatchNormalization(256))
     model:add(nn.SpatialDropout())
     local imgSize = 0.25 * dimensions[2] * dimensions[3]
     model:add(nn.View(256 * imgSize))
-    model:add(nn.BatchNormalization(256 * imgSize))
   
     model:add(nn.Linear(256 * imgSize, 1024))
-    model:add(activation())
     model:add(nn.BatchNormalization(1024))
+    model:add(activation())
     model:add(nn.Dropout())
   
     model:add(nn.Linear(1024, 1024))
-    model:add(activation())
     model:add(nn.BatchNormalization(1024))
+    model:add(activation())
     model:add(nn.Dropout())
   
     model:add(nn.Linear(1024, 2))
