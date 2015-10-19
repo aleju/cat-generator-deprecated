@@ -10,7 +10,7 @@ NN_UTILS = require 'utils.nn_utils'
 MODELS = require 'models'
 
 OPT = lapp[[
-    --save          (default "losgs")
+    --save          (default "logs")
     --batchSize     (default 128)
     --noplot                            Whether to not plot
     --window        (default 13)
