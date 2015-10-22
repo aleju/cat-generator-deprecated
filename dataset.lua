@@ -14,7 +14,7 @@ dataset.originalScale = 64
 -- desired height/width of images
 dataset.scale = 32
 -- desired channels of images (1=grayscale, 3=color)
-dataset.nbChannels = 1
+dataset.nbChannels = 3
 
 -- cache for filepaths to all images
 dataset.paths = nil
@@ -114,9 +114,9 @@ function dataset.loadRandomImagesFromPaths(count)
         dataset.loadPaths()
     end
 
-    shuffle = torch.randperm(#dataset.paths)    
+    local shuffle = torch.randperm(#dataset.paths)    
     
-    images = {}
+    local images = {}
     for i=1,math.min(shuffle:size(1), count) do
        -- load each image
        table.insert(images, image.load(dataset.paths[shuffle[i]], dataset.nbChannels, "float"))
