@@ -11,7 +11,7 @@ MODELS = require 'models'
 
 OPT = lapp[[
     --save          (default "logs")
-    --batchSize     (default 128)
+    --batchSize     (default 32)
     --noplot                            Whether to not plot
     --window        (default 13)
     --seed          (default 1)
@@ -20,7 +20,7 @@ OPT = lapp[[
     --gpu           (default 0)
     --threads       (default 8)         number of threads
     --grayscale                         activate grayscale mode
-    --scale         (default 32)
+    --scale         (default 16)
     --V_clamp       (default 5)
     --V_L1          (default 0)
     --V_L2          (default 0)
@@ -76,7 +76,8 @@ function main()
     if OPT.aws then
         DATASET.setDirs({"/mnt/datasets/out_faces_64x64", "/mnt/datasets/images_faces_aug"})
     else
-        DATASET.setDirs({"/media/aj/ssd2a/ml/datasets/10k_cats/out_faces_64x64", "/media/aj/ssd2a/ml/datasets/flickr-cats/images_faces_aug"})
+        --DATASET.setDirs({"/media/aj/ssd2a/ml/datasets/10k_cats/out_faces_64x64", "/media/aj/ssd2a/ml/datasets/flickr-cats/images_faces_aug"})
+        DATASET.setDirs({"/media/aj/ssd2a/tmp/out_aug_64x64"})
     end
     ----------------------------------------------------------------------
     
@@ -259,6 +260,7 @@ function visualizeProgress()
     if #badImages > 0 then
         DISP.image(badImages, {win=OPT.window+1, width=IMG_DIMENSIONS[3]*15, title="V: rated as fake images (EPOCH " .. EPOCH .. ")"})
     end
+    --DISP.image(both, {win=OPT.window+3, width=IMG_DIMENSIONS[3]*15, title="V: all images (EPOCH " .. EPOCH .. ")"})
     
     -- reactivate dropout
     V:training()
@@ -276,13 +278,25 @@ function createSyntheticImages(N, allowSubcalls)
     local images
     local p = math.random()
     if p < 1/4 then
+        --print("mixed")
         images = createSyntheticImagesMix(N)
+        --image.display(images[1])
+        --io.read()
     elseif p >= 1/4 and p < 2/4 then
+        --print("warp")
         images = createSyntheticImagesWarp(N)
+        --image.display(images[1])
+        --io.read()
     elseif p >= 2/4 and p < 3/4 then
+        --print("stamp")
         images = createSyntheticImagesStamp(N)
+        --image.display(images[1])
+        --io.read()
     else
+        --print("random")
         images = createSyntheticImagesRandom(N)
+        --image.display(images[1])
+        --io.read()
     end
     
     -- Mix with deeper calls to this method
@@ -514,10 +528,10 @@ function getGaussianOverlay(blurSize)
         end
     end
     
-    local overlay1 = OVERLAYS[math.random(#OVERLAYS)]
-    local overlay2 = OVERLAYS[math.random(#OVERLAYS)]
-    local overlay3 = OVERLAYS[math.random(#OVERLAYS)]
-    local overlay4 = OVERLAYS[math.random(#OVERLAYS)]
+    local overlay1 = OVERLAYS[math.random(#OVERLAYS)]:clone()
+    local overlay2 = OVERLAYS[math.random(#OVERLAYS)]:clone()
+    local overlay3 = OVERLAYS[math.random(#OVERLAYS)]:clone()
+    local overlay4 = OVERLAYS[math.random(#OVERLAYS)]:clone()
     local overlayResult = overlay1:mul(2) - overlay2
     overlayResult = torch.clamp(overlayResult, 0.0, 1.0)
     overlayResult = overlayResult + overlay3:cmul(overlay4):mul(2)
