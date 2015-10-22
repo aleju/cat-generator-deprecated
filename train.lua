@@ -13,17 +13,17 @@ MODELS = require 'models'
 ----------------------------------------------------------------------
 -- parse command-line options
 OPT = lapp[[
-  -s,--save          (default "logs")       subdirectory to save logs
+  --save             (default "logs")       subdirectory to save logs
   --saveFreq         (default 30)           save every saveFreq epochs
-  -n,--network       (default "")           reload pretrained network
+  --network          (default "")           reload pretrained network
   --V_dir            (default "logs")       Directory where V networks are saved
   --G_pretrained_dir (default "logs")
-  -p,--plot                                 plot while training
+  --noplot                                  plot while training
   --D_sgd_lr         (default 0.02)         D SGD learning rate
   --G_sgd_lr         (default 0.02)         G SGD learning rate
   --D_sgd_momentum   (default 0)            D SGD momentum
   --G_sgd_momentum   (default 0)            G SGD momentum
-  -b,--batchSize     (default 16)           batch size
+  --batchSize        (default 32)           batch size
   --N_epoch          (default 1000)         Number of examples per epoch (-1 means all)
   --G_L1             (default 0)            L1 penalty on the weights of G
   --G_L2             (default 0e-6)         L2 penalty on the weights of G
@@ -36,11 +36,11 @@ OPT = lapp[[
   --G_clamp          (default 5)            Clamp threshold for G's gradient (+/- N)
   --D_optmethod      (default "adam")       adam|adagrad
   --G_optmethod      (default "adam")       adam|adagrad
-  -t,--threads       (default 8)            number of threads
-  -g,--gpu           (default -1)           gpu to run on (default cpu)
-  -d,--noiseDim      (default 100)          dimensionality of noise vector
-  -w, --window       (default 3)            window id of sample image
-  --scale            (default 32)           scale of images to train on
+  --threads          (default 4)            number of threads
+  --gpu              (default 0)            gpu to run on (default cpu)
+  --noiseDim         (default 100)          dimensionality of noise vector
+  --window           (default 3)            window id of sample image
+  --scale            (default 16)           scale of images to train on
   --grayscale                               grayscale mode on/off
   --autoencoder      (default "")           path to autoencoder to load weights from
   --rebuildOptstate  (default 0)            whether to force a rebuild of the optimizer state
@@ -88,8 +88,8 @@ DATASET.setScale(OPT.scale)
 if OPT.aws then
     DATASET.setDirs({"/mnt/datasets/out_faces_64x64", "/mnt/datasets/images_faces_aug"})
 else
-    DATASET.setDirs({"/media/aj/ssd2a/ml/datasets/10k_cats/out_faces_64x64", "/media/aj/ssd2a/ml/datasets/flickr-cats/images_faces_aug"})
-    --DATASET.setDirs({"/media/aj/ssd2a/ml/datasets/10k_cats/out_faces_unaug_64x64"})
+    --DATASET.setDirs({"/media/aj/ssd2a/ml/datasets/10k_cats/out_faces_64x64", "/media/aj/ssd2a/ml/datasets/flickr-cats/images_faces_aug"})
+    DATASET.setDirs({"/media/aj/ssd2a/tmp/out_aug_64x64"})
 end
 ----------------------------------------------------------------------
 
@@ -114,7 +114,7 @@ function main()
     local tmp = torch.load(filename)
     MODEL_V = tmp.V
     MODEL_V:float()
-    --MODEL_V:evaluate() -- deactivate dropout, off because NaNs when on?!
+    MODEL_V:evaluate() -- deactivate dropout, off because NaNs when on?!
 
     -- load previous networks (D and G)
     -- or initialize them new
@@ -330,7 +330,7 @@ function main()
         print('Loading new training data...')
         TRAIN_DATA = DATASET.loadRandomImages(OPT.N_epoch)
 
-        if OPT.plot then
+        if not OPT.noplot then
             NN_UTILS.visualizeProgress(VIS_NOISE_INPUTS)
             --TRAIN_LOGGER:style{['% mean class accuracy (train set)'] = '-'}
             --TEST_LOGGER:style{['% mean class accuracy (test set)'] = '-'}
