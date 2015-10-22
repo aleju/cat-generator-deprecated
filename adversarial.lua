@@ -1,6 +1,4 @@
 require 'torch'
---require 'nn'
---require 'cunn'
 require 'optim'
 require 'pl'
 require 'interruptable_optimizers'
@@ -43,7 +41,6 @@ function adversarial.train(trainData, maxAccuracyD, accsInterval)
     local countNotTrainedD = 0
     local count_lr_increased_D = 0
     local count_lr_decreased_D = 0
-    --local last_D_input = 
     samples = nil
 
     local batchIdx = 0
@@ -58,21 +55,12 @@ function adversarial.train(trainData, maxAccuracyD, accsInterval)
         
         -- Inputs for D, either original or generated images
         local inputs = torch.Tensor(thisBatchSize, IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3])
-        if OPT.gpu then
-            --inputs = inputs:cuda()
-        end
         
         -- target y-values
         local targets = torch.Tensor(thisBatchSize)
-        if OPT.gpu then
-            --targets = targets:cuda()
-        end
         
         -- tensor to use for noise for G
         local noiseInputs = torch.Tensor(thisBatchSize, OPT.noiseDim)
-        if OPT.gpu then
-            --noiseInputs = noiseInputs:cuda()
-        end
         
         -- this script currently can't handle small sized batches
         if thisBatchSize < 4 then
