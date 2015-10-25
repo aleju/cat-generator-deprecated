@@ -38,8 +38,8 @@ OPT = lapp[[
   --gpu              (default 0)            gpu to run on (default cpu)
   --noiseDim         (default 100)          dimensionality of noise vector
   --window           (default 3)            window id of sample image
-  --coarseSize       (default 16)          coarse scale
-  --fineSize         (default 32)          fine scale
+  --coarseSize       (default 16)           coarse scale
+  --fineSize         (default 32)           fine scale
   --grayscale                               grayscale mode on/off
   --seed             (default 1)            seed for the RNG
   --aws                                     run in AWS mode
@@ -90,10 +90,11 @@ DATASET.setFineScale(OPT.fineSize)
 -- 199,840 in 10k cats
 -- 111,344 in flickr cats
 if OPT.aws then
-    DATASET.setDirs({"/mnt/datasets/out_faces_64x64", "/mnt/datasets/images_faces_aug"})
+    --DATASET.setDirs({"/mnt/datasets/out_faces_64x64", "/mnt/datasets/images_faces_aug"})
+    DATASET.setDirs({"/mnt/datasets/out_aug_64x64"})
 else
     --DATASET.setDirs({"/media/aj/ssd2a/ml/datasets/10k_cats/out_faces_64x64", "/media/aj/ssd2a/ml/datasets/flickr-cats/images_faces_aug"})
-    DATASET.setDirs({"/media/aj/ssd2a/tmp/out_aug_64x64"})
+    DATASET.setDirs({"dataset/out_aug_64x64"})
 end
 ----------------------------------------------------------------------
 
@@ -116,10 +117,10 @@ if OPT.network ~= "" then
     local tmp = torch.load(OPT.network)
     MODEL_D = tmp.D
     MODEL_G = tmp.G
-    OPTSTATE = tmp.optstate
+    --OPTSTATE = tmp.optstate
     EPOCH = tmp.epoch
     
-    if OPT.gpu ~= false then
+    if OPT.gpu == false then
         MODEL_D:float()
         MODEL_G:float()
     end
@@ -127,7 +128,13 @@ else
     MODEL_D = MODELS.create_D(IMG_DIMENSIONS, OPT.gpu ~= false)
     MODEL_G = MODELS.create_G(IMG_DIMENSIONS, OPT.noiseDim, OPT.gpu ~= false)
 end
-    
+
+if OPT.gpu then
+    print("Copying model to gpu...")
+    MODEL_D = NN_UTILS.activateCuda(MODEL_D)
+    MODEL_G = NN_UTILS.activateCuda(MODEL_G)
+end
+
 -- loss function: negative log-likelihood
 CRITERION = nn.BCECriterion()
 
@@ -145,18 +152,20 @@ print(MODEL_G)
 
 -- count free parameters in D/G
 local nparams = 0
-for i=1,#MODEL_D.modules do
-  if MODEL_D.modules[i].weight ~= nil then
-    nparams = nparams + MODEL_D.modules[i].weight:nElement()
+local dModules = MODEL_D:listModules()
+for i=1,#dModules do
+  if dModules[i].weight ~= nil then
+    nparams = nparams + dModules[i].weight:nElement()
   end
 end
 print('\nNumber of free parameters in D: ' .. nparams)
 
 
 local nparams = 0
-for i=1,#MODEL_G.modules do
-  if MODEL_G.modules[i].weight ~= nil then
-    nparams = nparams + MODEL_G.modules[i].weight:nElement()
+local gModules = MODEL_G:listModules()
+for i=1,#gModules do
+  if gModules[i].weight ~= nil then
+    nparams = nparams + gModules[i].weight:nElement()
   end
 end
 print('Number of free parameters in G: ' .. nparams .. '\n')
@@ -193,7 +202,7 @@ function getSamples(ds, N)
   local noiseInputs = torch.Tensor(N, NOISE_DIM[1], NOISE_DIM[2], NOISE_DIM[3])
   local condInputs = torch.Tensor(N, COND_DIM[1], COND_DIM[2], COND_DIM[3])
   local gt_diff = torch.Tensor(N, IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3])
-  local gt = torch.Tensor(N, 3, OPT.fineSize, OPT.fineSize)
+  local gt = torch.Tensor(N, IMG_DIMENSIONS[1], OPT.fineSize, OPT.fineSize)
 
   -- Generate samples
   noiseInputs:uniform(-1, 1)
