@@ -86,10 +86,11 @@ DATASET.setScale(OPT.scale)
 -- 199,840 in 10k cats
 -- 111,344 in flickr cats
 if OPT.aws then
-    DATASET.setDirs({"/mnt/datasets/out_faces_64x64", "/mnt/datasets/images_faces_aug"})
+    --DATASET.setDirs({"/mnt/datasets/out_faces_64x64", "/mnt/datasets/images_faces_aug"})
+    DATASET.setDirs({"/mnt/datasets/out_aug_64x64"})
 else
     --DATASET.setDirs({"/media/aj/ssd2a/ml/datasets/10k_cats/out_faces_64x64", "/media/aj/ssd2a/ml/datasets/flickr-cats/images_faces_aug"})
-    DATASET.setDirs({"/media/aj/ssd2a/tmp/out_aug_64x64"})
+    DATASET.setDirs({"dataset/out_aug_64x64"})
 end
 ----------------------------------------------------------------------
 
@@ -114,7 +115,7 @@ function main()
     local tmp = torch.load(filename)
     MODEL_V = tmp.V
     MODEL_V:float()
-    MODEL_V:evaluate() -- deactivate dropout, off because NaNs when on?!
+    MODEL_V:evaluate() -- deactivate dropout
 
     -- load previous networks (D and G)
     -- or initialize them new
@@ -126,7 +127,7 @@ function main()
         OPTSTATE = tmp.optstate
         EPOCH = tmp.epoch
         
-        if OPT.gpu ~= false then
+        if OPT.gpu == false then
             MODEL_D:float()
             MODEL_G:float()
         end
@@ -284,6 +285,8 @@ function main()
         print("Copying model to gpu...")
         MODEL_D = NN_UTILS.activateCuda(MODEL_D)
         MODEL_G = NN_UTILS.activateCuda(MODEL_G)
+        --MODEL_D:cuda()
+        --MODEL_G:cuda()
     end
 
     -- loss function: negative log-likelihood
