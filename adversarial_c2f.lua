@@ -204,7 +204,7 @@ function adversarial.train(trainData)
 
     -- save/log current net
     if EPOCH % OPT.saveFreq == 0 then
-        local filename = paths.concat(OPT.save, 'adversarial_c2f.net')
+        local filename = paths.concat(OPT.save, string.format('adversarial_c2f_%d_to_%d.net', OPT.coarseSize, OPT.fineSize))
         os.execute(string.format("mkdir -p %s", sys.dirname(filename)))
         if paths.filep(filename) then
             os.execute(string.format("mv %s %s.old", filename, filename))
@@ -330,7 +330,7 @@ function adversarial.approxParzen(ds, nsamples, nneighbors)
   if distances:mean() < best_dist then 
     best_dist = distances:mean()
 
-    local filename = paths.concat(OPT.save, 'adversarial_c2f.bestnet')
+    local filename = paths.concat(OPT.save, string.format('adversarial_c2f_%d_to_%d.bestnet', OPT.coarseSize, OPT.fineSize))
     os.execute('mkdir -p ' .. sys.dirname(filename))
     if paths.filep(filename) then
       os.execute('mv ' .. filename .. ' ' .. filename .. '.old')
