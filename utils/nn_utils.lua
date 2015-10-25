@@ -79,21 +79,24 @@ end
 -- Descending order starts at y=1 (Y_NOT_GENERATOR) and ends with y=0 (Y_GENERATOR).
 -- Therefore, in case of descending order, images for which D is very certain that they are real
 -- come first and images that seem to be fake (according to D) come last.
--- @param images The images to sort.
+-- @param images Tensor of the images to sort.
 -- @param ascending If true then images that seem most fake to D are placed at the start of the list.
 --                  Otherwise the list starts with probably real images.
 -- @param nbMaxOut Sets how many images may be returned max (cant be more images than provided).
 -- @return Tuple (list of images, list of predictions between 0.0 and 1.0)
 --                                where 1.0 means "probably real"
 function nn_utils.sortImagesByPrediction(images, ascending, nbMaxOut)
-    --if OPT.gpu then images = images:cuda() end
-    local predictions = MODEL_D:forward(images)
-    
-    --if OPT.gpu then predictions = predictions:float() end
+    local predictions = torch.Tensor(images:size(1), 1)
+    local nBatches = 1 + (images:size(1)/OPT.batchSize)
+    for i=1,nBatches do
+        local batchStart = 1 + (i-1)*OPT.batchSize
+        local batchEnd = math.min(i*OPT.batchSize, images:size(1))
+        --print("[sort]", i, batchStart, batchEnd)
+        predictions[{{batchStart, batchEnd}, {1}}] = MODEL_D:forward(images[{{batchStart, batchEnd}, {}, {}, {}}])
+    end
     
     local imagesWithPreds = {}
     for i=1,images:size(1) do
-        --imagesWithPreds[i] = {images[i], predictions[i][1]}
         table.insert(imagesWithPreds, {images[i], predictions[i][1]})
     end
     
@@ -365,6 +368,7 @@ end
 -- @param net The network to activate CUDA mode on.
 -- @returns The CUDA network
 function nn_utils.activateCuda(net)
+    --[[
     local newNet = net:clone()
     newNet:cuda()
     local tmp = nn.Sequential()
@@ -372,6 +376,65 @@ function nn_utils.activateCuda(net)
     tmp:add(newNet)
     tmp:add(nn.Copy('torch.CudaTensor', 'torch.FloatTensor'))
     return tmp
+    --]]
+    local newNet = net:clone()
+    
+    -- does the network already contain any copy layers?
+    local containsCopyLayers = false
+    local modules = newNet:listModules()
+    for i=1,#modules do
+        local t = torch.type(modules[i])
+        if string.find(t, "Copy") ~= nil then
+            containsCopyLayers = true
+            break
+        end
+    end
+    
+    -- no copy layers in the network yet
+    -- add them at the start and end
+    if not containsCopyLayers then
+        local tmp = nn.Sequential()
+        tmp:add(nn.Copy('torch.FloatTensor', 'torch.CudaTensor'))
+        tmp:add(newNet)
+        tmp:add(nn.Copy('torch.CudaTensor', 'torch.FloatTensor'))
+        newNet:cuda()
+        newNet = tmp
+    end
+    
+    --[[
+    local firstCopyFound = false
+    local lastCopyFound = false
+    modules = newNet:listModules()
+    for i=1,#modules do
+        print("module "..i.." " .. torch.type(modules[i]))
+        local t = torch.type(modules[i])
+        if string.find(t, "Copy") ~= nil then
+            if not firstCopyFound then
+                firstCopyFound = true
+                modules[i]:cuda()
+                modules[i].intype = 'torch.FloatTensor'
+                modules[i].outtype = 'torch.CudaTensor'
+            else
+                -- last copy found
+                lastCopyFound = true
+                modules[i]:float()
+                modules[i].intype = 'torch.CudaTensor'
+                modules[i].outtype = 'torch.FloatTensor'
+            end
+        elseif lastCopyFound then
+            print("calling float() A")
+            modules[i]:float()
+        elseif firstCopyFound then
+            print("calling cuda()")
+            modules[i]:cuda()
+        else
+            print("calling float() B")
+            modules[i]:float()
+        end
+    end
+    --]]
+    
+    return newNet
 end
 
 -- Creates an average rating (0 to 1) for a list of images.
