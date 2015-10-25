@@ -74,10 +74,11 @@ function main()
     -- 199,840 in 10k cats
     -- 111,344 in flickr cats
     if OPT.aws then
-        DATASET.setDirs({"/mnt/datasets/out_faces_64x64", "/mnt/datasets/images_faces_aug"})
+        --DATASET.setDirs({"/mnt/datasets/out_faces_64x64", "/mnt/datasets/images_faces_aug"})
+        DATASET.setDirs({"/mnt/datasets/out_aug_64x64"})
     else
         --DATASET.setDirs({"/media/aj/ssd2a/ml/datasets/10k_cats/out_faces_64x64", "/media/aj/ssd2a/ml/datasets/flickr-cats/images_faces_aug"})
-        DATASET.setDirs({"/media/aj/ssd2a/tmp/out_aug_64x64"})
+        DATASET.setDirs({"dataset/out_aug_64x64"})
     end
     ----------------------------------------------------------------------
     
