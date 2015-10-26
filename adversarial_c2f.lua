@@ -23,7 +23,8 @@ function adversarial.train(trainData)
 
     -- do one epoch
     local batchIdx = 0
-    print(string.format("<trainer> Epoch #%d [batchSize = %d]", EPOCH, OPT.batchSize))
+    print("")
+    print(string.format("<trainer> EPOCH #%d [batchSize = %d]", EPOCH, OPT.batchSize))
     
     for t = 1,N_epoch,dataBatchSize do 
         -- size of this batch, will usually be dataBatchSize but can be lower at the end
@@ -202,21 +203,6 @@ function adversarial.train(trainData)
     local tV = CONFUSION.totalValid
     CONFUSION:zero()
 
-    -- save/log current net
-    if EPOCH % OPT.saveFreq == 0 then
-        local filename = paths.concat(OPT.save, string.format('adversarial_c2f_%d_to_%d.net', OPT.coarseSize, OPT.fineSize))
-        os.execute(string.format("mkdir -p %s", sys.dirname(filename)))
-        if paths.filep(filename) then
-            os.execute(string.format("mv %s %s.old", filename, filename))
-        end
-        print(string.format("<trainer> saving network to %s", filename))
-        
-        torch.save(filename, {D = MODEL_D, G = MODEL_G, opt = OPT, epoch=EPOCH+1})
-    end
-
-    -- next epoch
-    EPOCH = EPOCH + 1
-
     return tV
 end
 
@@ -300,15 +286,16 @@ end
 
 -- Unnormalized parzen window type estimate (used to track performance during training)
 -- Really just a nearest neighbours of ground truth to multiple generations
-function adversarial.approxParzen(ds, nsamples, nneighbors)
-  best_dist = best_dist or 1e10
+function adversarial.approxParzen(ds, nneighbors)
+  nsamples = ds:size(1)
   print('<trainer> evaluating approximate parzen ')
   local noiseInputs = torch.Tensor(nneighbors, NOISE_DIM[1], NOISE_DIM[2], NOISE_DIM[3])
   local condInputs = torch.Tensor(nneighbors, COND_DIM[1], COND_DIM[2], COND_DIM[3])
   local distances = torch.Tensor(nsamples)
   for n = 1,nsamples do
     xlua.progress(n, nsamples)
-    local example = ds[math.random(ds:size())]
+    --local example = ds[math.random(ds:size())]
+    local example = ds[n]
     local condInput = example.coarse
     local fine = example.fine
     noiseInputs:uniform(-1, 1)
@@ -326,18 +313,6 @@ function adversarial.approxParzen(ds, nsamples, nneighbors)
   end
   print('average || x_' .. OPT.fineSize .. ' - G(x_' .. OPT.coarseSize .. ') || = ' .. distances:mean()) 
 
-  -- save/log current net
-  if distances:mean() < best_dist then 
-    best_dist = distances:mean()
-
-    local filename = paths.concat(OPT.save, string.format('adversarial_c2f_%d_to_%d.bestnet', OPT.coarseSize, OPT.fineSize))
-    os.execute('mkdir -p ' .. sys.dirname(filename))
-    if paths.filep(filename) then
-      os.execute('mv ' .. filename .. ' ' .. filename .. '.old')
-    end
-    print('<trainer> saving network to '..filename)
-    torch.save(filename, {D = MODEL_D, G = MODEL_G, opt = OPT})
-  end
   return distances
 end
 
