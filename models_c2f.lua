@@ -45,7 +45,7 @@ end
 
 function models.create_G(dimensions, noiseDim, cuda)
     if dimensions[1] == 1 and dimensions[2] == 32 and dimensions[2] == 32 then
-        return models.create_G_3x32x32(dimensions, noiseDim, cuda)
+        return models.create_G_1x32x32(dimensions, noiseDim, cuda)
     else
         return models.create_G_3x32x32(dimensions, noiseDim, cuda)
     end
@@ -63,9 +63,9 @@ function models.create_G_1x32x32(dimensions, noiseDim, cuda)
     local inner = nn.Sequential()
     inner:add(cudnn.SpatialConvolutionUpsample(dimensions[1]+1, 64, 3, 3, 1))
     inner:add(nn.PReLU())
-    inner:add(cudnn.SpatialConvolutionUpsample(64, 32, 5, 5, 1))
+    inner:add(cudnn.SpatialConvolutionUpsample(64, 512, 7, 7, 1))
     inner:add(nn.PReLU())
-    inner:add(cudnn.SpatialConvolutionUpsample(32, dimensions[1], 5, 5, 1))
+    inner:add(cudnn.SpatialConvolutionUpsample(512, dimensions[1], 5, 5, 1))
     inner:add(nn.View(dimensions[1], dimensions[2], dimensions[3]))
     model_G:add(inner)
     if cuda then
@@ -113,7 +113,7 @@ end
 
 function models.create_D(dimensions, cuda)
     if dimensions[1] == 1 and dimensions[2] == 32 and dimensions[2] == 32 then
-        return models.create_D_3x32x32(dimensions, cuda)
+        return models.create_D_1x32x32(dimensions, cuda)
     else
         return models.create_D_3x32x32(dimensions, cuda)
     end
@@ -132,20 +132,19 @@ function models.create_D_1x32x32(dimensions, cuda)
     
     inner:add(nn.SpatialConvolution(dimensions[1], 64, 3, 3, 1, 1, (3-1)/2))
     inner:add(nn.PReLU())
-    inner:add(nn.SpatialConvolution(64, 64, 5, 5, 1, 1, (5-1)/2))
+    --inner:add(nn.SpatialConvolution(64, 64, 3, 3, 1, 1, (3-1)/2))
+    --inner:add(nn.PReLU())
+    inner:add(nn.SpatialConvolution(64, 256, 5, 5, 1, 1, (5-1)/2))
     inner:add(nn.PReLU())
     inner:add(nn.SpatialMaxPooling(2, 2))
-    inner:add(nn.SpatialConvolution(64, 32, 3, 3, 1, 1, (3-1)/2))
+    inner:add(nn.SpatialConvolution(256, 1024, 3, 3, 1, 1, (3-1)/2))
     inner:add(nn.PReLU())
+    inner:add(nn.SpatialMaxPooling(2, 2))
     inner:add(nn.Dropout())
     
-    inner:add(nn.View(32 * 0.25 * dimensions[2] * dimensions[3]))
+    inner:add(nn.View(1024 * 0.25 * 0.25 * dimensions[2] * dimensions[3]))
     
-    --inner:add(nn.Linear(32 * 0.25 * dimensions[2] * dimensions[3], 256))
-    --inner:add(nn.PReLU())
-    --inner:add(nn.Dropout())
-    --inner:add(nn.Linear(256, 1))
-    inner:add(nn.Linear(32 * 0.25 * dimensions[2] * dimensions[3], 1))
+    inner:add(nn.Linear(1024 * 0.25 * 0.25 * dimensions[2] * dimensions[3], 1))
     inner:add(nn.Sigmoid())
     model_D:add(inner)
     if cuda then
