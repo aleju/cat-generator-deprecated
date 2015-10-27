@@ -227,6 +227,16 @@ function nn_utils.switchToEvaluationMode()
     MODEL_D:evaluate()
 end
 
+function nn_utils.normalize(data, mean_, std_)
+    local mean = mean or data:mean(1)
+    local std = std_ or data:std(1, true)
+    local eps = 1e-7
+    for i=1,data:size(1) do
+        data[i]:add(-1, mean)
+        data[i]:cdiv(std + eps)
+    end
+    return mean, std
+end
 
 -- Contains the pixels necessary to draw digits 0 to 9
 CHAR_TENSORS = {}

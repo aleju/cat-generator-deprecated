@@ -94,6 +94,20 @@ function dataset._toResult(fineImages)
         end
     end
     
+    function result:normalize(mean, std)
+        NN_UTILS.normalize(result.fine, mean, std)
+        fineImages = result.fine
+        
+        for i=1,N do
+            local tmp = image.scale(fineImages[i], dataset.coarseScale, dataset.coarseScale)
+            result.coarseImages[i] = image.scale(tmp, dataset.fineScale, dataset.fineScale)
+        end
+        
+        for i=1,N do
+            result.diffImages[i] = torch.add(fineImages[i], -1, coarseImages[i])
+        end
+    end
+    
 
     setmetatable(result, {
         __index = function(self, index)
