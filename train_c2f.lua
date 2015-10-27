@@ -15,7 +15,7 @@ MODELS = require 'models_c2f'
 -- parse command-line options
 OPT = lapp[[
   --save             (default "logs")       subdirectory to save logs
-  --saveFreq         (default 30)           save every saveFreq epochs
+  --saveFreq         (default 10)           save every saveFreq epochs
   --network          (default "")           reload pretrained network
   --noplot                                  plot while training
   --D_sgd_lr         (default 0.02)         D SGD learning rate
@@ -32,14 +32,16 @@ OPT = lapp[[
   --G_iterations     (default 1)            number of iterations to optimize G for
   --D_clamp          (default 1)            Clamp threshold for D's gradient (+/- N)
   --G_clamp          (default 5)            Clamp threshold for G's gradient (+/- N)
-  --D_optmethod      (default "adam")       adam|adagrad
-  --G_optmethod      (default "adam")       adam|adagrad
+  --D_optmethod      (default "adam")       adam|adagrad|sgd
+  --G_optmethod      (default "adam")       adam|adagrad|sgd
   --threads          (default 4)            number of threads
   --gpu              (default 0)            gpu to run on (default cpu)
   --noiseDim         (default 100)          dimensionality of noise vector
   --window           (default 3)            window id of sample image
   --coarseSize       (default 16)           coarse scale
   --fineSize         (default 32)           fine scale
+  --parzenImages     (default 250)          Number of images in approximate parzen (nsamples)
+  --parzenNeighbours (default 32)           Number of generated refinements per image in approximate parzen (will choose min distance)
   --grayscale                               grayscale mode on/off
   --seed             (default 1)            seed for the RNG
   --aws                                     run in AWS mode
@@ -119,6 +121,7 @@ if OPT.network ~= "" then
     MODEL_G = tmp.G
     --OPTSTATE = tmp.optstate
     EPOCH = tmp.epoch
+    PLOT_DATA = tmp.plot_data
     
     if OPT.gpu == false then
         MODEL_D:float()
@@ -189,11 +192,7 @@ if OPTSTATE == nil or OPT.rebuildOptstate == 1 then
     }
 end
 
-if EPOCH == nil then
-    EPOCH = 1
-end
-PLOT_DATA = {}
-VIS_NOISE_INPUTS = NN_UTILS.createNoiseInputs(100)
+--VIS_NOISE_INPUTS = NN_UTILS.createNoiseInputs(100)
 
 
 -- Get examples to plot
@@ -228,28 +227,84 @@ function getSamples(ds, N)
   return to_plot
 end
 
-VAL_DATA = DATASET.loadImages(0, 500)
+function saveAs(filename)
+    os.execute(string.format("mkdir -p %s", sys.dirname(filename)))
+    if paths.filep(filename) then
+      os.execute(string.format("mv %s %s.old", filename, filename))
+    end
+    print(string.format("<trainer> saving network to %s", filename))
+    torch.save(filename, {D = MODEL_D, G = MODEL_G, opt = OPT, plot_data = PLOT_DATA, epoch = EPOCH})
+end
+
+if EPOCH == nil then EPOCH = 1 end
+TRAIN_DATA = DATASET.loadRandomImages(10000, VAL_DATA:size() + 1)
+NORMALIZE_MEAN, NORMALIZE_STD = TRAIN_DATA.normalize()
+VAL_DATA = DATASET.loadImages(0, OPT.parzenImages)
+VAL_DATA:normalize(NORMALIZE_MEAN, NORMALIZE_STD)
+
+if PLOT_DATA == nil then
+    PLOT_DATA = {}
+    LAST_PARZEN_APPROX = nil
+    BEST_PARZEN_APPROX = nil
+else
+    LAST_PARZEN_APPROX = PLOT_DATA[#PLOT_DATA][2]
+    BEST_PARZEN_APPROX = LAST_PARZEN_APPROX
+
+    -- we start at epoch 50,
+    -- that way we avoid getting stuck at a low value from an early epoch (where low means that G
+    -- simply didnt change anything about the image)
+    BEST_PARZEN_APPROX = PLOT_DATA[1][2]
+    for i=1,#PLOT_DATA do
+        if PLOT_DATA[i][1] > 50 then
+            if PLOT_DATA[i][2] > BEST_PARZEN_APPROX then
+                BEST_PARZEN_APPROX = PLOT_DATA[i][2]
+            end
+        end
+    end
+    
+    BEST_PARZEN_APPROX = LAST_PARZEN_APPROX
+end
 
 -- training loop
 while true do
+    -- load new data
     print('Loading new training data...')
-    TRAIN_DATA = DATASET.loadRandomImages(OPT.N_epoch, 500)
+    TRAIN_DATA = DATASET.loadRandomImages(OPT.N_epoch, VAL_DATA:size() + 1)
+    TRAIN_DATA:normalize(NORMALIZE_MEAN, NORMALIZE_STD)
     
-    --if not OPT.noplot then
-    --    NN_UTILS.visualizeProgress(VIS_NOISE_INPUTS)
-    --end
-    
-    -- plot errors
+    -- plot
     if not OPT.noplot then
         local to_plot = getSamples(VAL_DATA, 20)
-        disp.image(to_plot, {win=OPT.window, width=2*10*IMG_DIMENSIONS[3], title="Coarse, GT, G img, GT diff, G diff (" .. OPT.save .. " epoch " .. EPOCH .. ")"})
+        disp.image(to_plot, {win=OPT.window, width=2*10*IMG_DIMENSIONS[3], title=string.format("Coarse, GT, G img, GT diff, G diff (%s epoch %d)", OPT.save, EPOCH)})
+        if BEST_PARZEN_APPROX ~= nil and LAST_PARZEN_APPROX == BEST_PARZEN_APPROX then
+            disp.image(to_plot, {win=OPT.window+1, width=2*10*IMG_DIMENSIONS[3], title=string.format("Best, parzen dist=%.3f (%s at epoch %d)", BEST_PARZEN_APPROX, OPT.save, EPOCH)})
+        end
+        if #PLOT_DATA > 0 then
+            disp.plot(PLOT_DATA, {win=OPT.window+2, labels={'epoch', 'parzen'}, title=string.format('Parzen Approximation Rating (min=%.3f) (lower is better)', BEST_PARZEN_APPROX)})
+        end
     end
     
-    -- train/test
+    -- train
     ADVERSARIAL.train(TRAIN_DATA)
-    --adversarial.test(valData, nval)
-
-    ADVERSARIAL.approxParzen(VAL_DATA, 200, OPT.batchSize)
-
     
+    -- save every N epochs
+    if EPOCH % OPT.saveFreq == 0 then
+        local filename = paths.concat(OPT.save, string.format('adversarial_c2f_%d_to_%d.net', OPT.coarseSize, OPT.fineSize))
+        saveAs(filename)
+    end
+
+    -- approximate parzen evaluation
+    local dist = ADVERSARIAL.approxParzen(VAL_DATA, OPT.parzenNeighbours)
+    LAST_PARZEN_APPROX = dist:mean()
+    table.insert(PLOT_DATA, {EPOCH, LAST_PARZEN_APPROX})
+    -- if best value, then save network and log this value
+    if BEST_PARZEN_APPROX == nil or LAST_PARZEN_APPROX < BEST_PARZEN_APPROX then
+        if EPOCH > 10 then
+            BEST_PARZEN_APPROX = LAST_PARZEN_APPROX
+            local filename = paths.concat(OPT.save, string.format('adversarial_c2f_%d_to_%d.bestnet', OPT.coarseSize, OPT.fineSize))
+            saveAs(filename)
+        end
+    end
+    
+    EPOCH = EPOCH + 1
 end
