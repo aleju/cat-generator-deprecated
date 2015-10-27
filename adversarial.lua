@@ -335,28 +335,7 @@ function adversarial.train(trainData, maxAccuracyD, accsInterval)
     print("Confusion of D:")
     print(CONFUSION)
     local tV = CONFUSION.totalValid
-    --TRAIN_LOGGER:add{['% mean class accuracy (train set)'] = tV * 100}
     CONFUSION:zero()
-
-    -- save/log current net
-    if EPOCH % OPT.saveFreq == 0 then
-        local filename = paths.concat(OPT.save, 'adversarial.net')
-        os.execute(string.format("mkdir -p %s", sys.dirname(filename)))
-        if paths.filep(filename) then
-            os.execute(string.format("mv %s %s.old", filename, filename))
-        end
-        print(string.format("<trainer> saving network to %s", filename))
-        
-        --local tmp = MODEL_D
-        --if torch.type(tmp:get(1)) == "nn.Copy" then
-        --    tmp:remove(1)
-        --end
-        
-        torch.save(filename, {D = MODEL_D, G = MODEL_G, opt = OPT, epoch=EPOCH+1}) --optstate = OPTSTATE, 
-    end
-
-    -- next epoch
-    EPOCH = EPOCH + 1
 
     return tV
 end

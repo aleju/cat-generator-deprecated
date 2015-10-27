@@ -99,13 +99,15 @@ print("<trainer> starting gpu support...")
 require 'nn'
 require 'cutorch'
 require 'cunn'
+require 'LeakyReLU'
+require 'dpnn'
+require 'layers.cudnnSpatialConvolutionUpsample'
 if OPT.gpu then
     cutorch.setDevice(OPT.gpu + 1)
     cutorch.manualSeed(OPT.seed)
     print(string.format("<trainer> using gpu device %d", OPT.gpu))
 end
 torch.setdefaulttensortype('torch.FloatTensor')
-
 
 function main()
     ----------------------------------------------------------------------
@@ -322,6 +324,11 @@ function main()
         }
     end
 
+    if NORMALIZE_MEAN == nil then
+        TRAIN_DATA = DATASET.loadRandomImages(10000)
+        NORMALIZE_MEAN, NORMALIZE_STD = TRAIN_DATA.normalize()
+    end
+
     if EPOCH == nil then
         EPOCH = 1
     end
@@ -332,6 +339,7 @@ function main()
     while true do
         print('Loading new training data...')
         TRAIN_DATA = DATASET.loadRandomImages(OPT.N_epoch)
+        TRAIN_DATA.normalize(NORMALIZE_MEAN, NORMALIZE_STD)
 
         if not OPT.noplot then
             NN_UTILS.visualizeProgress(VIS_NOISE_INPUTS)
@@ -341,9 +349,26 @@ function main()
 
         -- Train D and G
         -- ... but train D only while having an accuracy below OPT.D_maxAcc
-        -- ... over the last math.max(20, math.min(1000/OPT.batchSize, 250)) batches
+        --     over the last math.max(20, math.min(1000/OPT.batchSize, 250)) batches
         ADVERSARIAL.train(TRAIN_DATA, OPT.D_maxAcc, math.max(20, math.min(1000/OPT.batchSize, 250)))
+        
+        -- save/log current net
+        if EPOCH % OPT.saveFreq == 0 then
+            local filename = paths.concat(OPT.save, 'adversarial.net')
+            saveAs(filename)
+        end
+        
+        EPOCH = EPOCH + 1
     end
+end
+
+function saveAs(filename)
+    os.execute(string.format("mkdir -p %s", sys.dirname(filename)))
+    if paths.filep(filename) then
+      os.execute(string.format("mv %s %s.old", filename, filename))
+    end
+    print(string.format("<trainer> saving network to %s", filename))
+    torch.save(filename, {D = MODEL_D, G = MODEL_G, opt = OPT, plot_data = PLOT_DATA, epoch = EPOCH+1, normalize_mean=NORMALIZE_MEAN, normalize_std=NORMALIZE_STD})
 end
 
 main()
