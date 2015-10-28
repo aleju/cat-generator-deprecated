@@ -228,7 +228,8 @@ function nn_utils.switchToEvaluationMode()
 end
 
 function nn_utils.normalize(data, mean_, std_)
-    local mean = mean or data:mean(1)
+    --[[
+    local mean = mean_ or data:mean(1)
     local std = std_ or data:std(1, true)
     local eps = 1e-7
     for i=1,data:size(1) do
@@ -236,6 +237,16 @@ function nn_utils.normalize(data, mean_, std_)
         data[i]:cdiv(std + eps)
     end
     return mean, std
+    --]]
+    
+    for i=1,data:size(1) do
+        local m = torch.max(data[i])
+        data[i]:div(m * 0.5)
+        data[i]:add(-1.0)
+        data[i] = torch.clamp(data[i], -1.0, 1.0)
+    end
+    
+    return 0.5, 0.5
 end
 
 -- Contains the pixels necessary to draw digits 0 to 9
@@ -372,6 +383,17 @@ function nn_utils.deactivateCuda(net)
     end
 end
 
+function nn_utils.containsCopyLayers(net)
+    local modules = net:listModules()
+    for i=1,#modules do
+        local t = torch.type(modules[i])
+        if string.find(t, "Copy") ~= nil then
+            return true
+        end
+    end
+    return false
+end
+
 -- Activates CUDA mode on a network and returns the result.
 -- This adds Copy layers at the start and end of the network.
 -- Expects the default tensor to be FloatTensor.
@@ -390,15 +412,7 @@ function nn_utils.activateCuda(net)
     local newNet = net:clone()
     
     -- does the network already contain any copy layers?
-    local containsCopyLayers = false
-    local modules = newNet:listModules()
-    for i=1,#modules do
-        local t = torch.type(modules[i])
-        if string.find(t, "Copy") ~= nil then
-            containsCopyLayers = true
-            break
-        end
-    end
+    local containsCopyLayers = nn_utils.containsCopyLayers(newNet)
     
     -- no copy layers in the network yet
     -- add them at the start and end
