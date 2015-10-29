@@ -264,6 +264,7 @@ function models.create_D_st(dimensions, cuda)
         conv:add(nn.Copy('torch.FloatTensor', 'torch.CudaTensor', true, true))
     end
     conv:add(models.createSpatialTransformer(true, false, false, dimensions[2], dimensions[1], cuda))
+    conv:add(nn.Dropout(0.2))
     conv:add(nn.SpatialConvolution(dimensions[1], 64, 3, 3, 1, 1, (3-1)/2))
     conv:add(nn.PReLU())
     conv:add(nn.SpatialConvolution(64, 64, 3, 3, 1, 1, (3-1)/2))
@@ -271,9 +272,9 @@ function models.create_D_st(dimensions, cuda)
     
     local branch1 = nn.Sequential()
     branch1:add(models.createSpatialTransformer(false, true, true, dimensions[2], 64, cuda))
-    branch1:add(nn.SpatialConvolution(64, 256, 3, 3, 1, 1, (3-1)/2))
+    branch1:add(nn.SpatialConvolution(64, 128, 3, 3, 1, 1, (3-1)/2))
     branch1:add(nn.PReLU())
-    branch1:add(nn.SpatialConvolution(256, 256, 3, 3, 1, 1, (3-1)/2))
+    branch1:add(nn.SpatialConvolution(128, 128, 3, 3, 1, 1, (3-1)/2))
     branch1:add(nn.PReLU())
     branch1:add(nn.SpatialMaxPooling(2, 2, 2, 2))
     
@@ -289,12 +290,82 @@ function models.create_D_st(dimensions, cuda)
     concy:add(branch2)
     
     conv:add(concy)
+    conv:add(nn.SpatialConvolution(128+128, 256, 3, 3, 1, 1, (3-1)/2))
+    conv:add(nn.PReLU())
     conv:add(nn.SpatialDropout())
-    conv:add(nn.View((256+128) * 0.25 * dimensions[2] * dimensions[3]))
-    conv:add(nn.Linear((256+128) * 0.25 * dimensions[2] * dimensions[3], 1024))
+    conv:add(nn.View(256 * 0.25 * dimensions[2] * dimensions[3]))
+    conv:add(nn.Linear(256 * 0.25 * dimensions[2] * dimensions[3], 256))
     conv:add(nn.PReLU())
     conv:add(nn.Dropout())
-    conv:add(nn.Linear(1024, 1))
+    conv:add(nn.Linear(256, 1))
+    conv:add(nn.Sigmoid())
+
+    if cuda then
+        conv:add(nn.Copy('torch.CudaTensor', 'torch.FloatTensor', true, true))
+        conv:cuda()
+    end
+
+    conv = require('weight-init')(conv, 'heuristic')
+
+    return conv
+end
+
+function models.create_D_st2(dimensions, cuda)
+    local conv = nn.Sequential()
+    if cuda then
+        conv:add(nn.Copy('torch.FloatTensor', 'torch.CudaTensor', true, true))
+    end
+    conv:add(models.createSpatialTransformer(true, false, false, dimensions[2], dimensions[1], cuda))
+    conv:add(nn.Dropout(0.2))
+    conv:add(nn.SpatialConvolution(dimensions[1], 64, 3, 3, 1, 1, (3-1)/2))
+    conv:add(nn.PReLU())
+    conv:add(nn.SpatialConvolution(64, 64, 3, 3, 1, 1, (3-1)/2))
+    conv:add(nn.PReLU())
+    
+    local branch1 = nn.Sequential()
+    branch1:add(models.createSpatialTransformer(true, true, true, dimensions[2], 64, cuda))
+    branch1:add(nn.SpatialConvolution(64, 64, 3, 3, 1, 1, (3-1)/2))
+    branch1:add(nn.PReLU())
+    branch1:add(nn.SpatialConvolution(64, 64, 3, 3, 1, 1, (3-1)/2))
+    branch1:add(nn.PReLU())
+    branch1:add(nn.SpatialMaxPooling(2, 2, 2, 2))
+    
+    local branch2 = nn.Sequential()
+    branch2:add(models.createSpatialTransformer(true, true, true, dimensions[2], 64, cuda))
+    branch2:add(nn.SpatialConvolution(64, 64, 3, 3, 1, 1, (3-1)/2))
+    branch2:add(nn.PReLU())
+    branch2:add(nn.SpatialConvolution(64, 64, 3, 3, 1, 1, (3-1)/2))
+    branch2:add(nn.PReLU())
+    branch2:add(nn.SpatialMaxPooling(2, 2, 2, 2))
+    
+    local branch3 = nn.Sequential()
+    branch3:add(models.createSpatialTransformer(true, true, true, dimensions[2], 64, cuda))
+    branch3:add(nn.SpatialConvolution(64, 64, 3, 3, 1, 1, (3-1)/2))
+    branch3:add(nn.PReLU())
+    branch3:add(nn.SpatialConvolution(64, 64, 3, 3, 1, 1, (3-1)/2))
+    branch3:add(nn.PReLU())
+    branch3:add(nn.SpatialMaxPooling(2, 2, 2, 2))
+    
+    local branch4 = nn.Sequential()
+    branch4:add(nn.SpatialMaxPooling(2, 2, 2, 2))
+    branch4:add(nn.SpatialConvolution(64, 128, 5, 5, 1, 1, (5-1)/2))
+    branch4:add(nn.PReLU())
+    branch4:add(nn.SpatialConvolution(128, 128, 7, 7, 1, 1, (7-1)/2))
+    branch4:add(nn.PReLU())
+    
+    local concy = nn.Concat(2)
+    concy:add(branch1)
+    concy:add(branch2)
+    concy:add(branch3)
+    concy:add(branch4)
+    
+    conv:add(concy)
+    conv:add(nn.SpatialDropout())
+    conv:add(nn.View((64+64+64+128) * 0.25 * dimensions[2] * dimensions[3]))
+    conv:add(nn.Linear((64+64+64+128) * 0.25 * dimensions[2] * dimensions[3], 256))
+    conv:add(nn.PReLU())
+    conv:add(nn.Dropout())
+    conv:add(nn.Linear(256, 1))
     conv:add(nn.Sigmoid())
 
     if cuda then
