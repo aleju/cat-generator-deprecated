@@ -87,11 +87,10 @@ end
 --                                where 1.0 means "probably real"
 function nn_utils.sortImagesByPrediction(images, ascending, nbMaxOut)
     local predictions = torch.Tensor(images:size(1), 1)
-    local nBatches = 1 + (images:size(1)/OPT.batchSize)
+    local nBatches = math.ceil(images:size(1)/OPT.batchSize)
     for i=1,nBatches do
         local batchStart = 1 + (i-1)*OPT.batchSize
         local batchEnd = math.min(i*OPT.batchSize, images:size(1))
-        --print("[sort]", i, batchStart, batchEnd)
         predictions[{{batchStart, batchEnd}, {1}}] = MODEL_D:forward(images[{{batchStart, batchEnd}, {}, {}, {}}])
     end
     
@@ -232,16 +231,46 @@ function nn_utils.normalize(data, mean_, std_)
     local mean = mean_ or data:mean(1)
     local std = std_ or data:std(1, true)
     local eps = 1e-7
-    for i=1,data:size(1) do
+    local N
+    if data.size ~= nil then
+        N = data:size(1)
+    else
+        N = #data
+    end
+    
+    for i=1,N do
         data[i]:add(-1, mean)
         data[i]:cdiv(std + eps)
     end
+    
     return mean, std
     --]]
     
-    for i=1,data:size(1) do
+    --[[
+    local N
+    if data.size ~= nil then
+        N = data:size(1)
+    else
+        N = #data
+    end
+    
+    for i=1,N do
         local m = torch.max(data[i])
         data[i]:div(m * 0.5)
+        data[i]:add(-1.0)
+        data[i] = torch.clamp(data[i], -1.0, 1.0)
+    end
+    --]]
+    
+    local N
+    if data.size ~= nil then
+        N = data:size(1)
+    else
+        N = #data
+    end
+    
+    for i=1,N do
+        data[i]:mul(2)
         data[i]:add(-1.0)
         data[i] = torch.clamp(data[i], -1.0, 1.0)
     end
