@@ -16,11 +16,11 @@ OPT = lapp[[
     --window        (default 23)
     --seed          (default 1)
     --aws                               run in AWS mode
-    --saveFreq      (default 50)        
+    --saveFreq      (default 20)        
     --gpu           (default 0)
     --threads       (default 8)         number of threads
     --grayscale                         activate grayscale mode
-    --scale         (default 32)
+    --scale         (default 16)
     --G_clamp       (default 5)
     --G_L1          (default 0)
     --G_L2          (default 0)
@@ -90,12 +90,15 @@ function main()
     CRITERION = nn.MSECriterion()
     PARAMETERS_G_AUTOENCODER, GRAD_PARAMETERS_G_AUTOENCODER = G_AUTOENCODER:getParameters()
     OPTSTATE = {adam={}}
+    TRAIN_DATA = DATASET.loadRandomImages(10000)
+    --NORMALIZE_MEAN, NORMALIZE_STD = TRAIN_DATA.normalize()
     
     -- training loop
     EPOCH = 1
     while true do
-        TRAIN_DATA = DATASET.loadRandomImages(OPT.N_epoch)
         print(string.format("<trainer> Epoch %d", EPOCH))
+        TRAIN_DATA = DATASET.loadRandomImages(OPT.N_epoch)
+        --TRAIN_DATA.normalize(NORMALIZE_MEAN, NORMALIZE_STD)
         epoch()
         if not OPT.noplot then
             visualizeProgress()
