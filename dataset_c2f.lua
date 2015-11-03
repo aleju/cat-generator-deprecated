@@ -46,12 +46,17 @@ function dataset.setNbChannels(nbChannels)
   dataset.nbChannels = nbChannels
 end
 
-function dataset._toResult(fineImages)
-    local N = fineImages:size(1)
+function dataset._makeFineCoarseDiff(originals)
+    local N = originals:size(1)
+    
+    local fineImages = torch.FloatTensor(N, dataset.nbChannels, dataset.fineScale, dataset.fineScale)
+    for i=1,N do
+        fineImages[i] = image.scale(originals[i], dataset.fineScale, dataset.fineScale)
+    end
     
     local coarseImages = torch.FloatTensor(N, dataset.nbChannels, dataset.fineScale, dataset.fineScale)
     for i=1,N do
-        local tmp = image.scale(fineImages[i], dataset.coarseScale, dataset.coarseScale)
+        local tmp = image.scale(originals[i], dataset.coarseScale, dataset.coarseScale)
         coarseImages[i] = image.scale(tmp, dataset.fineScale, dataset.fineScale)
     end
     
@@ -59,9 +64,16 @@ function dataset._toResult(fineImages)
     for i=1,N do
         diffImages[i] = torch.add(fineImages[i], -1, coarseImages[i])
     end
+    
+    return fineImages, coarseImages, diffImages
+end
 
-
+function dataset._toResult(originals)
+    local N = originals:size(1)
+    local fineImages, coarseImages, diffImages = dataset._makeFineCoarseDiff(originals)
+    
     local result = {}
+    result.originals = originals
     result.fine = fineImages
     result.coarse = coarseImages
     result.diff = diffImages
@@ -95,17 +107,12 @@ function dataset._toResult(fineImages)
     end
     
     function result:normalize(mean, std)
-        NN_UTILS.normalize(result.fine, mean, std)
-        fineImages = result.fine
-        
-        for i=1,N do
-            local tmp = image.scale(fineImages[i], dataset.coarseScale, dataset.coarseScale)
-            result.coarseImages[i] = image.scale(tmp, dataset.fineScale, dataset.fineScale)
-        end
-        
-        for i=1,N do
-            result.diffImages[i] = torch.add(fineImages[i], -1, coarseImages[i])
-        end
+        mean, std = NN_UTILS.normalize(result.originals, mean, std)
+        local f, c, d = dataset._makeFineCoarseDiff(result.originals)
+        result.fine = f
+        result.coarse = c
+        result.diff = d
+        return mean, std
     end
     
 
@@ -134,10 +141,11 @@ function dataset.loadImages(startAt, count)
     end
 
     local N = math.min(count, #dataset.paths)
-    local data = torch.FloatTensor(N, dataset.nbChannels, dataset.fineScale, dataset.fineScale)
+    local data = torch.FloatTensor(N, dataset.nbChannels, dataset.originalScale, dataset.originalScale)
     for i=1,N do
         local img = image.load(dataset.paths[startAt + i], dataset.nbChannels, "float")
-        data[i] = image.scale(img, dataset.fineScale, dataset.fineScale)
+        --data[i] = image.scale(img, dataset.fineScale, dataset.fineScale)
+        data[i] = img
     end
 
     print(string.format('<dataset> loaded %d examples', N))
@@ -186,9 +194,10 @@ function dataset.loadRandomImages(count, startAt)
     --local images = dataset.loadRandomImagesFromDirs(dataset.dirs, dataset.fileExtension, count)
     local images = dataset.loadRandomImagesFromPaths(count, startAt)
     local N = #images
-    local data = torch.FloatTensor(N, dataset.nbChannels, dataset.fineScale, dataset.fineScale)
+    local data = torch.FloatTensor(N, dataset.nbChannels, dataset.originalScale, dataset.originalScale)
     for i=1, N do
-        data[i] = image.scale(images[i], dataset.fineScale, dataset.fineScale)
+        --data[i] = image.scale(images[i], dataset.fineScale, dataset.fineScale)
+        data[i] = images[i]
     end
 
     --local ker = torch.ones(3)
