@@ -83,18 +83,16 @@ DATASET.nbChannels = IMG_DIMENSIONS[1]
 DATASET.setFileExtension("jpg")
 DATASET.setScale(OPT.scale)
 
--- 199,840 in 10k cats
--- 111,344 in flickr cats
 if OPT.aws then
-    --DATASET.setDirs({"/mnt/datasets/out_faces_64x64", "/mnt/datasets/images_faces_aug"})
     DATASET.setDirs({"/mnt/datasets/out_aug_64x64"})
 else
-    --DATASET.setDirs({"/media/aj/ssd2a/ml/datasets/10k_cats/out_faces_64x64", "/media/aj/ssd2a/ml/datasets/flickr-cats/images_faces_aug"})
     DATASET.setDirs({"dataset/out_aug_64x64"})
 end
 ----------------------------------------------------------------------
 
 -- run on gpu if chosen
+-- We have to load all kinds of libraries here, otherwise we risk crashes when loading
+-- saved networks afterwards
 print("<trainer> starting gpu support...")
 require 'nn'
 require 'cutorch'
@@ -131,6 +129,9 @@ function main()
         MODEL_G2_CORE = tmp.G2:get(3)
         OPTSTATE = tmp.optstate
         EPOCH = tmp.epoch
+        -- Normalization is deactivated for now
+        -- NORMALIZE_MEAN = tmp.normalize_mean
+        -- NORMALIZE_STD = tmp.normalize_std
         
         if OPT.gpu == false then
             MODEL_D:float()
@@ -141,8 +142,6 @@ function main()
         --------------
         -- D
         --------------
-  
-        --MODEL_D = MODELS.create_D(IMG_DIMENSIONS)
         MODEL_D = MODELS.create_D_st3(IMG_DIMENSIONS, true)
       
         --------------
@@ -157,6 +156,8 @@ function main()
         else
             print("<trainer> Note: Did not find pretrained G")
             if OPT.autoencoder ~= "" then
+                -- If G was created as a refiner of an autoencoder, load the autoencoder now.
+                -- Old stuff that probably doesn't even work anymore.
                 local left = nn.Sequential()
                 left:add(nn.View(INPUT_SZ))
                 local right = nn.Sequential()
@@ -179,17 +180,29 @@ function main()
                 MODEL_G:add(nn.CAddTable())
                 MODEL_G:add(nn.View(IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3]))
             else
+                -- Create a new G. See models.lua
                 MODEL_G = MODELS.create_G(IMG_DIMENSIONS, OPT.noiseDim)
             end
         end
         
+        if OPT.gpu then
+            MODEL_G = NN_UTILS.activateCuda(MODEL_G)
+        end
         
-        MODEL_G = NN_UTILS.activateCuda(MODEL_G)
         
+        -- Initialize G2
+        -- MODEL_G2 = 
+        --   [1] G1
+        --   [2] Copy to GPU
+        --   [3] G2 = MODEL_G2_CORE
+        --   [4] Copy to CPU
         MODEL_G2 = nn.Sequential()
         MODEL_G2:add(MODEL_G)
-        MODEL_G2:add(nn.Copy('torch.FloatTensor', 'torch.CudaTensor'))
+        if OPT.gpu then
+            MODEL_G2:add(nn.Copy('torch.FloatTensor', 'torch.CudaTensor'))
+        end
         local inner = nn.Sequential()
+        -- image -> upsample 32 3x3, PReLU -> upsample 64 5x5, PReLU -> upsample 1 5x5, Sigmoid
         inner:add(cudnn.SpatialConvolutionUpsample(IMG_DIMENSIONS[1], 32, 3, 3, 1))
         inner:add(nn.PReLU())
         inner:add(cudnn.SpatialConvolutionUpsample(32, 64, 5, 5, 1))
@@ -198,69 +211,23 @@ function main()
         inner:add(nn.Sigmoid())
         inner = require('weight-init')(inner, 'heuristic')
         MODEL_G2:add(inner)
-        MODEL_G2:add(nn.Copy('torch.CudaTensor', 'torch.FloatTensor'))
-        inner:cuda()
-        MODEL_G2_CORE = inner
-        
-        
-        
-        --[[
-        MODEL_G2 = nn.Sequential()
-        MODEL_G2:add(MODEL_G:get(1))
-        MODEL_G2:add(MODEL_G:get(2))
-        MODEL_G2:add(nn.Copy('torch.FloatTensor', 'torch.CudaTensor'))
-        MODEL_G2_CORE = nn.Sequential()
-        
-        MODEL_G2_CORE:add(nn.Linear(2048, 2048))
-        MODEL_G2_CORE:add(nn.PReLU())
-        MODEL_G2_CORE:add(nn.Linear(2048, IMG_DIMENSIONS[1] * IMG_DIMENSIONS[2] * IMG_DIMENSIONS[3]))
-        --MODEL_G2_CORE:add(nn.PReLU())
-        --MODEL_G2_CORE:add(nn.Linear(512, IMG_DIMENSIONS[1] * IMG_DIMENSIONS[2] * IMG_DIMENSIONS[3]))
-        MODEL_G2_CORE:add(nn.Sigmoid())
-        NN_UTILS.initializeWeights(MODEL_G2_CORE, 0.01, 0.005)
-        --MODEL_G2_CORE = require('weight-init')(model, 'heuristic')
-        
-        MODEL_G2_CORE:add(nn.View(IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3]))
-        MODEL_G2_CORE:cuda()
-        
-        MODEL_G2:add(MODEL_G2_CORE)
-        MODEL_G2:add(nn.Copy('torch.CudaTensor', 'torch.FloatTensor'))
-        --]]
-        
-        --[[
-        MODEL_G2 = nn.Sequential()
-        MODEL_G2:add(MODEL_G)
-        MODEL_G2:add(nn.Copy('torch.FloatTensor', 'torch.CudaTensor'))
-        MODEL_G2_CORE = nn.Sequential()
-        MODEL_G2_CORE:add(nn.View(INPUT_SZ))
-        --MODEL_G2_CORE:add(nn.AddConstant(-0.5))
-        --MODEL_G2_CORE:add(nn.MulConstant(2))
-        MODEL_G2_CORE:add(nn.Linear(INPUT_SZ, 512))
-        MODEL_G2_CORE:add(nn.PReLU())
-        MODEL_G2_CORE:add(nn.Linear(512, INPUT_SZ))
-        MODEL_G2_CORE:add(nn.Sigmoid())
-        NN_UTILS.initializeWeights(MODEL_G2_CORE, 0.0025, 0.002)
-        for i=1,INPUT_SZ do
-            MODEL_G2_CORE.modules[2].weight[i][i] = 0.9
-            MODEL_G2_CORE.modules[4].weight[i][i] = 0.9
+        if OPT.gpu then
+            MODEL_G2:add(nn.Copy('torch.CudaTensor', 'torch.FloatTensor'))
+            inner:cuda()
         end
-        
-        MODEL_G2_CORE:add(nn.View(IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3]))
-        MODEL_G2_CORE:cuda()
-        
-        MODEL_G2:add(MODEL_G2_CORE)
-        MODEL_G2:add(nn.Copy('torch.CudaTensor', 'torch.FloatTensor'))
-        --]]
+        MODEL_G2_CORE = inner
     end
 
+    -- Show the models
     print(MODEL_D)
     print(MODEL_G)
     print(MODEL_G2)
 
-
     if OPT.autoencoder == "" then
         print("[INFO] No Autoencoder network specified, will not use an autoencoder.")
     else
+        -- If G was created as a refiner of an autoencoder, load the autoencoder now.
+        -- Old stuff that probably doesn't even work anymore.
         print("<trainer> Loading autoencoder")
         local tmp = torch.load(OPT.autoencoder)
         local savedAutoencoder = tmp.AE
@@ -286,14 +253,6 @@ function main()
         end
     end
 
-    if OPT.gpu then
-        print("Copying model to gpu...")
-        --MODEL_D = NN_UTILS.activateCuda(MODEL_D)
-        --MODEL_G = NN_UTILS.activateCuda(MODEL_G)
-        --MODEL_D:cuda()
-        --MODEL_G:cuda()
-    end
-
     -- loss function: negative log-likelihood
     CRITERION = nn.BCECriterion()
     CRITERION_G2_D = nn.BCECriterion()
@@ -307,10 +266,6 @@ function main()
 
     -- this matrix records the current confusion across classes
     CONFUSION = optim.ConfusionMatrix(CLASSES)
-
-    -- log results to files
-    --TRAIN_LOGGER = optim.Logger(paths.concat(OPT.save, 'train.log'))
-    --TEST_LOGGER = optim.Logger(paths.concat(OPT.save, 'test.log'))
 
     -- Set optimizer state
     if OPTSTATE == nil or OPT.rebuildOptstate == 1 then
@@ -334,10 +289,11 @@ function main()
         }
     end
 
-    if NORMALIZE_MEAN == nil then
-        --TRAIN_DATA = DATASET.loadRandomImages(10000)
-        --NORMALIZE_MEAN, NORMALIZE_STD = TRAIN_DATA.normalize()
-    end
+    -- Normalization was deactivated for now
+    --if NORMALIZE_MEAN == nil then
+    --    TRAIN_DATA = DATASET.loadRandomImages(10000)
+    --    NORMALIZE_MEAN, NORMALIZE_STD = TRAIN_DATA.normalize()
+    --end
 
     if EPOCH == nil then
         EPOCH = 1
@@ -351,9 +307,13 @@ function main()
         TRAIN_DATA = DATASET.loadRandomImages(OPT.N_epoch)
         --TRAIN_DATA.normalize(NORMALIZE_MEAN, NORMALIZE_STD)
 
+        -- Show images and plots
         if not OPT.noplot then
+            -- Standard plots showing results of G1, some random samples, good and bad
+            -- images from G1
             NN_UTILS.visualizeProgress(VIS_NOISE_INPUTS)
             
+            -- Show samples from G1 and G2, also show G1 and G2 results side by side upscaled
             local samplesG1 = MODEL_G:forward(VIS_NOISE_INPUTS)
             local samplesG2 = MODEL_G2:forward(VIS_NOISE_INPUTS)
             DISP.image(samplesG2, {win=OPT.window+6, width=IMG_DIMENSIONS[3]*15, title="G2"})
@@ -362,7 +322,6 @@ function main()
                 mixture[#mixture+1] = image.scale(samplesG1[i], OPT.scale*4, OPT.scale*4)
                 mixture[#mixture+1] = image.scale(samplesG2[i], OPT.scale*4, OPT.scale*4)
             end
-            --DISP.image(mixture, {win=OPT.window+7, width=IMG_DIMENSIONS[3]*4*15, title="G1+G2 upscaled"})
             DISP.image(mixture, {win=OPT.window+7, width=IMG_DIMENSIONS[3]*4*10, title="G1+G2 upscaled"})
         end
 
@@ -381,6 +340,8 @@ function main()
     end
 end
 
+-- Save the current models G1 and G2 and D to a file.
+-- @param filename The path to the file
 function saveAs(filename)
     os.execute(string.format("mkdir -p %s", sys.dirname(filename)))
     if paths.filep(filename) then
