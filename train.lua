@@ -83,18 +83,16 @@ DATASET.nbChannels = IMG_DIMENSIONS[1]
 DATASET.setFileExtension("jpg")
 DATASET.setScale(OPT.scale)
 
--- 199,840 in 10k cats
--- 111,344 in flickr cats
 if OPT.aws then
-    --DATASET.setDirs({"/mnt/datasets/out_faces_64x64", "/mnt/datasets/images_faces_aug"})
     DATASET.setDirs({"/mnt/datasets/out_aug_64x64"})
 else
-    --DATASET.setDirs({"/media/aj/ssd2a/ml/datasets/10k_cats/out_faces_64x64", "/media/aj/ssd2a/ml/datasets/flickr-cats/images_faces_aug"})
     DATASET.setDirs({"dataset/out_aug_64x64"})
 end
 ----------------------------------------------------------------------
 
 -- run on gpu if chosen
+-- We have to load all kinds of libraries here, otherwise we risk crashes when loading
+-- saved networks afterwards
 print("<trainer> starting gpu support...")
 require 'nn'
 require 'cutorch'
@@ -102,6 +100,7 @@ require 'cunn'
 require 'LeakyReLU'
 require 'dpnn'
 require 'layers.cudnnSpatialConvolutionUpsample'
+require 'stn'
 if OPT.gpu then
     cutorch.setDevice(OPT.gpu + 1)
     cutorch.manualSeed(OPT.seed)
@@ -128,6 +127,9 @@ function main()
         MODEL_G = tmp.G
         OPTSTATE = tmp.optstate
         EPOCH = tmp.epoch
+        -- Normalization is deactivated for now
+        -- NORMALIZE_MEAN = tmp.normalize_mean
+        -- NORMALIZE_STD = tmp.normalize_std
         
         if OPT.gpu == false then
             MODEL_D:float()
@@ -137,88 +139,14 @@ function main()
         --------------
         -- D
         --------------
-  
-        --[[
-        local activation = nn.PReLU
-        local branch_conv = nn.Sequential()
-        --branch_conv:add(nn.SpatialDropout())
-        branch_conv:add(nn.SpatialConvolution(IMG_DIMENSIONS[1], 128, 3, 3, 1, 1, (3-1)/2))
-        branch_conv:add(activation())
-        branch_conv:add(nn.SpatialConvolution(128, 128, 3, 3, 1, 1, (3-1)/2))
-        branch_conv:add(activation())
-        branch_conv:add(nn.SpatialMaxPooling(2, 2))
-        branch_conv:add(nn.SpatialDropout())
-        branch_conv:add(nn.View(128, 0.25*32*32))
-       
-        local parallel = nn.Parallel(2, 2)
-        for i=1,128 do
-            parallel:add(nn.Linear(0.25*32*32, 64))
-        end
-        branch_conv:add(parallel)
-        branch_conv:add(activation())
-        branch_conv:add(nn.Dropout())
-        --branch_conv:add(nn.AddGaussianNoise(0.0, 0.10))
-      
-        --branch_conv:add(nn.View(64 * 32 * 32))
-        --branch_conv:add(nn.Linear(64 * 32 * 32, 2048))
-        branch_conv:add(nn.Linear(128*64, 2048))
-        branch_conv:add(activation())
-        branch_conv:add(nn.Dropout())
-        --branch_conv:add(nn.AddGaussianNoise(0.0, 0.10))
-        branch_conv:add(nn.Linear(2048, 2048))
-        branch_conv:add(activation())
-        branch_conv:add(nn.Dropout())
-        --branch_conv:add(nn.AddGaussianNoise(0.0, 0.10))
-        branch_conv:add(nn.Linear(2048, 1))
-        branch_conv:add(nn.Sigmoid())
-        MODEL_D = branch_conv
-        --]]
-  
-        --[[
-        local activation = nn.PReLU
-        local branch_conv = nn.Sequential()
-      
-        branch_conv:add(nn.Dropout(0.1))
-      
-        branch_conv:add(nn.SpatialConvolution(IMG_DIMENSIONS[1], 64, 3, 3, 1, 1, (3-1)/2))
-        branch_conv:add(activation())
-        --branch_conv:add(nn.Dropout())
-        branch_conv:add(nn.SpatialConvolution(64, 64, 3, 3, 1, 1, (3-1)/2))
-        branch_conv:add(activation())
-        --branch_conv:add(nn.SpatialMaxPooling(2, 2))
-        --branch_conv:add(nn.SpatialDropout())
-        branch_conv:add(nn.Dropout())
-      
-        branch_conv:add(nn.SpatialConvolution(64, 128, 3, 3, 1, 1, (3-1)/2))
-        branch_conv:add(activation())
-        branch_conv:add(nn.SpatialMaxPooling(2, 2))
-        branch_conv:add(nn.SpatialConvolution(128, 128, 3, 3, 1, 1, (3-1)/2))
-        branch_conv:add(activation())
-        branch_conv:add(nn.Dropout())
-        --branch_conv:add(nn.SpatialMaxPooling(2, 2))
-        --branch_conv:add(nn.Dropout())
-        branch_conv:add(nn.View(128, 16*16))
-        local parallel = nn.Parallel(2, 2)
-        for i=1,128 do
-            parallel:add(nn.Linear(16*16, 128))
-        end
-        branch_conv:add(parallel)
-        branch_conv:add(activation())
-        branch_conv:add(nn.Dropout())
-      
-        branch_conv:add(nn.Linear(128*128, 1))
-        branch_conv:add(nn.Sigmoid())
-  
-        MODEL_D = branch_conv
-        --]]
-  
-        MODEL_D = MODELS.create_D(IMG_DIMENSIONS)
+        MODEL_D = MODELS.create_D_st3(IMG_DIMENSIONS, OPT.gpu ~= false)
       
         --------------
         -- G
         --------------
         local g_pt_filename = paths.concat(OPT.G_pretrained_dir, string.format('g_pretrained_%dx%dx%d_nd%d.net', IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3], OPT.noiseDim))
         if paths.filep(g_pt_filename) then
+            -- Load a pretrained version of G
             print("<trainer> loading pretrained G...")
             local tmp = torch.load(g_pt_filename)
             MODEL_G = tmp.G
@@ -226,7 +154,10 @@ function main()
             print(MODEL_G)
         else
             print("<trainer> Note: Did not find pretrained G")
+            
             if OPT.autoencoder ~= "" then
+                -- Create G as a refiner of an autoencoder. Old stuff that probably doesn't even
+                -- work anymore
                 local left = nn.Sequential()
                 left:add(nn.View(INPUT_SZ))
                 local right = nn.Sequential()
@@ -249,6 +180,7 @@ function main()
                 MODEL_G:add(nn.CAddTable())
                 MODEL_G:add(nn.View(IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3]))
             else
+                -- Create a new G. See models.lua
                 MODEL_G = MODELS.create_G(IMG_DIMENSIONS, OPT.noiseDim)
             end
         end
@@ -258,6 +190,8 @@ function main()
     if OPT.autoencoder == "" then
         print("[INFO] No Autoencoder network specified, will not use an autoencoder.")
     else
+        -- If G was created as a refiner of an autoencoder, load the autoencoder now.
+        -- Old stuff that probably doesn't even work anymore.
         print("<trainer> Loading autoencoder")
         local tmp = torch.load(OPT.autoencoder)
         local savedAutoencoder = tmp.AE
@@ -269,6 +203,7 @@ function main()
         MODEL_AE:add(nn.Sigmoid())
         MODEL_AE:add(nn.View(OPT.geometry[1], OPT.geometry[2], OPT.geometry[3]))
 
+        -- Set weights of the autoencoder in a needlesly complicated way.
         local mapping = {{1,6+1}, {3,6+3}, {5,6+5}}
         for i=1, #mapping do
             print(string.format("Loading AE layer %d from autoencoder layer %d ...", mapping[i][1], mapping[i][2]))
@@ -283,12 +218,12 @@ function main()
         end
     end
 
+    -- Copy models to GPU
     if OPT.gpu then
         print("Copying model to gpu...")
-        MODEL_D = NN_UTILS.activateCuda(MODEL_D)
+        -- D is already on the GPU
+        --MODEL_D = NN_UTILS.activateCuda(MODEL_D)
         MODEL_G = NN_UTILS.activateCuda(MODEL_G)
-        --MODEL_D:cuda()
-        --MODEL_G:cuda()
     end
 
     -- loss function: negative log-likelihood
@@ -301,11 +236,7 @@ function main()
     -- this matrix records the current confusion across classes
     CONFUSION = optim.ConfusionMatrix(CLASSES)
 
-    -- log results to files
-    --TRAIN_LOGGER = optim.Logger(paths.concat(OPT.save, 'train.log'))
-    --TEST_LOGGER = optim.Logger(paths.concat(OPT.save, 'test.log'))
-
-    -- Set optimizer state
+    -- Set optimizer states
     if OPTSTATE == nil or OPT.rebuildOptstate == 1 then
         OPTSTATE = {
             adagrad = {
@@ -324,10 +255,11 @@ function main()
         }
     end
 
-    if NORMALIZE_MEAN == nil then
-        TRAIN_DATA = DATASET.loadRandomImages(10000)
-        NORMALIZE_MEAN, NORMALIZE_STD = TRAIN_DATA.normalize()
-    end
+    -- Old stuff to normalize the images.
+    --if NORMALIZE_MEAN == nil then
+    --    TRAIN_DATA = DATASET.loadRandomImages(10000)
+    --    NORMALIZE_MEAN, NORMALIZE_STD = TRAIN_DATA.normalize()
+    --end
 
     if EPOCH == nil then
         EPOCH = 1
@@ -339,12 +271,11 @@ function main()
     while true do
         print('Loading new training data...')
         TRAIN_DATA = DATASET.loadRandomImages(OPT.N_epoch)
-        TRAIN_DATA.normalize(NORMALIZE_MEAN, NORMALIZE_STD)
+        --TRAIN_DATA.normalize(NORMALIZE_MEAN, NORMALIZE_STD)
 
+        -- Show images and plots if requested
         if not OPT.noplot then
             NN_UTILS.visualizeProgress(VIS_NOISE_INPUTS)
-            --TRAIN_LOGGER:style{['% mean class accuracy (train set)'] = '-'}
-            --TEST_LOGGER:style{['% mean class accuracy (test set)'] = '-'}
         end
 
         -- Train D and G
@@ -352,7 +283,7 @@ function main()
         --     over the last math.max(20, math.min(1000/OPT.batchSize, 250)) batches
         ADVERSARIAL.train(TRAIN_DATA, OPT.D_maxAcc, math.max(20, math.min(1000/OPT.batchSize, 250)))
         
-        -- save/log current net
+        -- Save current net
         if EPOCH % OPT.saveFreq == 0 then
             local filename = paths.concat(OPT.save, 'adversarial.net')
             saveAs(filename)
@@ -362,6 +293,8 @@ function main()
     end
 end
 
+-- Save the current models G and D to a file.
+-- @param filename The path to the file
 function saveAs(filename)
     os.execute(string.format("mkdir -p %s", sys.dirname(filename)))
     if paths.filep(filename) then
