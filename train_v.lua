@@ -23,7 +23,7 @@ OPT = lapp[[
     --scale         (default 16)
     --V_clamp       (default 5)
     --V_L1          (default 0)
-    --V_L2          (default 0)
+    --V_L2          (default 0.01)
     --N_epoch       (default 1000)
 ]]
 
@@ -71,13 +71,9 @@ function main()
     DATASET.setFileExtension("jpg")
     DATASET.setScale(OPT.scale)
 
-    -- 199,840 in 10k cats
-    -- 111,344 in flickr cats
     if OPT.aws then
-        --DATASET.setDirs({"/mnt/datasets/out_faces_64x64", "/mnt/datasets/images_faces_aug"})
         DATASET.setDirs({"/mnt/datasets/out_aug_64x64"})
     else
-        --DATASET.setDirs({"/media/aj/ssd2a/ml/datasets/10k_cats/out_faces_64x64", "/media/aj/ssd2a/ml/datasets/flickr-cats/images_faces_aug"})
         DATASET.setDirs({"dataset/out_aug_64x64"})
     end
     ----------------------------------------------------------------------
@@ -93,11 +89,15 @@ function main()
     PARAMETERS_V, GRAD_PARAMETERS_V = V:getParameters()
     CONFUSION = optim.ConfusionMatrix(CLASSES)
     OPTSTATE = {adam={}}
+    -- normalization is currently deactivated
+    --TRAIN_DATA = DATASET.loadRandomImages(10000)
+    --NORMALIZE_MEAN, NORMALIZE_STD = TRAIN_DATA.normalize()
     
     EPOCH = 1
     while true do
-        TRAIN_DATA = DATASET.loadRandomImages(OPT.N_epoch)
         print(string.format("<trainer> Epoch %d", EPOCH))
+        TRAIN_DATA = DATASET.loadRandomImages(OPT.N_epoch)
+        --TRAIN_DATA.normalize(NORMALIZE_MEAN, NORMALIZE_STD)
         epoch(V)
         if not OPT.noplot then
             visualizeProgress()
@@ -155,7 +155,7 @@ function epoch()
         end
         
         --------------------------------------
-        -- Collect Batch
+        -- Collect examples for batch
         --------------------------------------
         -- Real data 
         local exampleIdx = 1
@@ -169,7 +169,8 @@ function epoch()
         end
 
         -- Fake data
-        local images = createSyntheticImages(thisBatchSize/2, V)
+        local images = imageListToTensor(createSyntheticImages(thisBatchSize/2, V))
+        --NN_UTILS.normalize(images, NORMALIZE_MEAN, NORMALIZE_STD)
         for i = 1, realDataSize do
             inputs[exampleIdx] = images[i]:clone()
             targets[exampleIdx][Y_REAL+1] = 0
@@ -207,6 +208,17 @@ function epoch()
     EPOCH = EPOCH + 1
 end
 
+-- Convert a list (table) of images to a Tensor.
+-- @param imageList A list/table of images (tensors).
+-- @returns A tensor of shape (N, channels, height, width)
+function imageListToTensor(imageList)
+    local tens = torch.Tensor(#imageList, imageList[1]:size(1), imageList[1]:size(2), imageList[1]:size(3))
+    for i=1,#imageList do
+        tens[i] = imageList[i]
+    end
+    return tens
+end
+
 -- Create plots showing the current training progress.
 function visualizeProgress()
     -- deactivate dropout
@@ -214,12 +226,14 @@ function visualizeProgress()
     
     -- gather 50 real images and 50 fake (synthetic) images
     local imagesReal = DATASET.loadRandomImages(50)
-    local imagesFake = createSyntheticImages(50)
+    local imagesFake = imageListToTensor(createSyntheticImages(50))
+    --imagesReal.normalize(NORMALIZE_MEAN, NORMALIZE_STD)
+    --NN_UTILS.normalize(imagesFake, NORMALIZE_MEAN, NORMALIZE_STD)
     local both = torch.Tensor(100, IMG_DIMENSIONS[1], IMG_DIMENSIONS[2], IMG_DIMENSIONS[3])
     for i=1,imagesReal:size(1) do
         both[i] = imagesReal[i]
     end
-    for i=1,#imagesFake do
+    for i=1,imagesFake:size(1) do
         both[imagesReal:size(1) + i] = imagesFake[i]
     end
     
@@ -261,7 +275,6 @@ function visualizeProgress()
     if #badImages > 0 then
         DISP.image(badImages, {win=OPT.window+1, width=IMG_DIMENSIONS[3]*15, title="V: rated as fake images (EPOCH " .. EPOCH .. ")"})
     end
-    --DISP.image(both, {win=OPT.window+3, width=IMG_DIMENSIONS[3]*15, title="V: all images (EPOCH " .. EPOCH .. ")"})
     
     -- reactivate dropout
     V:training()
@@ -279,30 +292,17 @@ function createSyntheticImages(N, allowSubcalls)
     local images
     local p = math.random()
     if p < 1/4 then
-        --print("mixed")
         images = createSyntheticImagesMix(N)
-        --image.display(images[1])
-        --io.read()
     elseif p >= 1/4 and p < 2/4 then
-        --print("warp")
         images = createSyntheticImagesWarp(N)
-        --image.display(images[1])
-        --io.read()
     elseif p >= 2/4 and p < 3/4 then
-        --print("stamp")
         images = createSyntheticImagesStamp(N)
-        --image.display(images[1])
-        --io.read()
     else
-        --print("random")
         images = createSyntheticImagesRandom(N)
-        --image.display(images[1])
-        --io.read()
     end
     
     -- Mix with deeper calls to this method
     if allowSubcalls and math.random() < 0.33 then
-        --print("sub")
         local otherImages = createSyntheticImages(N, false)
         images = mixImageLists(images, otherImages)
     end
