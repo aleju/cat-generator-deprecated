@@ -1,6 +1,6 @@
 # About
 
-This script generates new images of cats using the technique of generative adversarial networks (GAN), as described in [the paper by Ian J. Goodfellow et al.](http://arxiv.org/abs/1406.2661).
+This script generates new images of cats using the technique of generative adversarial networks (GAN), as described in [the paper](http://arxiv.org/abs/1406.2661) by [Goodfellow](https://github.com/goodfeli) et al.
 The images are enhanced with the [laplacian pyramid technique](http://arxiv.org/abs/1506.05751) from Denton and [Soumith](https://github.com/soumith) Chintala et. al.
 Most of the code is based on facebook's [eyescream project](https://github.com/facebook/eyescream).
 It also uses code from other repositories for [spatial transformers](https://github.com/Moodstocks/gtsrb.torch/blob/master/networks.lua), [weight initialization](https://github.com/e-lab/torch-toolbox/blob/master/Weight-init/weight-init.lua) and [LeakyReLUs](https://github.com/nagadomi/waifu2x/blob/master/lib/LeakyReLU.lua).
