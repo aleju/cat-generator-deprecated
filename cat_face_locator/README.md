@@ -4,5 +4,9 @@ The network worked well, but not well enough. Sometimes it viewed stuff as cat f
 It was especially not able to accurately detect the angle of the eyes (relative to the x axis).
 Therefore, rotations could not be removed reliably. (Might be no longer a problem with spatial transformers in D.)
 
-The code is very messy. Most parts could and should be replaced by the classes in `dataset/dataset.py`.
+The code is very messy and might not even work currently. Most parts could and should be replaced by the classes in `dataset/dataset.py`.
 I will probably extract the code into its own project and clean it up at some point in the future.
+
+![Cat face locator example](images/example.png?raw=true "Cat face locator example")
+
+Note: Code to track the eye positions is currently not in this repository.
