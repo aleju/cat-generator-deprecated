@@ -67,8 +67,6 @@ function dataset.loadPaths()
         end
     end
     
-    --print(string.format("<dataset> Loaded %d filepaths", #files))
-    
     dataset.paths = files
 end
 
@@ -110,18 +108,11 @@ end
 -- @param count Number of random images.
 -- @return List of Tensors
 function dataset.loadRandomImages(count)
-    --local images = dataset.loadRandomImagesFromDirs(dataset.dirs, dataset.fileExtension, count)
     local images = dataset.loadRandomImagesFromPaths(count)
     local data = torch.FloatTensor(#images, dataset.nbChannels, dataset.scale, dataset.scale)
     for i=1, #images do
         data[i] = image.scale(images[i], dataset.scale, dataset.scale)
-        --data[i] = image.rotate(data[i], (math.random()*math.pi/4) - (math.pi/8), "bilinear")
-        --data[i] = image.rotate(data[i], math.pi/4, "bilinear")
     end
-
-    --local ker = torch.ones(3)
-    --local m = nn.SpatialSubtractiveNormalization(1, ker)
-    --data = m:forward(data)
 
     local N = data:size(1)
     local result = {}
@@ -140,8 +131,6 @@ function dataset.loadRandomImages(count)
         __index = function(self, index) return self.scaled[index] end,
         __len = function(self) return self.scaled:size(1) end
     })
-    
-    --print(string.format('<dataset> loaded %d random examples', N))
 
     return result
 end

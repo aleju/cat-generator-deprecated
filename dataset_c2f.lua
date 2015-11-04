@@ -32,10 +32,14 @@ function dataset.setFileExtension(fileExtension)
   dataset.fileExtension = fileExtension
 end
 
+-- Set desired height/width of upscaled images.
+-- @param scale Height/width
 function dataset.setFineScale(scale)
   dataset.fineScale = scale
 end
 
+-- Set desired height/width of images before upscaling.
+-- @param scale Height/width
 function dataset.setCoarseScale(scale)
   dataset.coarseScale = scale
 end
@@ -46,6 +50,11 @@ function dataset.setNbChannels(nbChannels)
   dataset.nbChannels = nbChannels
 end
 
+-- Generates from a tensor of original images for each image the fine (sharp upscaled) version,
+-- the coarse version (blurry upscaled one) and the diff (difference between sharp and blurry
+-- upscaled version).
+-- @param originals Tensor of images
+-- @returns Tuple (fine, coarse, diff), each a tensor of images
 function dataset._makeFineCoarseDiff(originals)
     local N = originals:size(1)
     
@@ -68,6 +77,10 @@ function dataset._makeFineCoarseDiff(originals)
     return fineImages, coarseImages, diffImages
 end
 
+-- Converts a tensor of full sized images to a result returned by this class.
+-- The result offers easy ways to access the coarse image, fine image and diff image.
+-- @param originals Tensor of full sized images
+-- @returns Table
 function dataset._toResult(originals)
     local N = originals:size(1)
     local fineImages, coarseImages, diffImages = dataset._makeFineCoarseDiff(originals)
@@ -144,11 +157,8 @@ function dataset.loadImages(startAt, count)
     local data = torch.FloatTensor(N, dataset.nbChannels, dataset.originalScale, dataset.originalScale)
     for i=1,N do
         local img = image.load(dataset.paths[startAt + i], dataset.nbChannels, "float")
-        --data[i] = image.scale(img, dataset.fineScale, dataset.fineScale)
         data[i] = img
     end
-
-    print(string.format('<dataset> loaded %d examples', N))
 
     return dataset._toResult(data)
 end
@@ -176,8 +186,6 @@ function dataset.loadPaths()
             error('given directory doesnt contain any files of type: ' .. ext)
         end
     end
-    
-    print(string.format("<dataset> Loaded %d filepaths", #files))
     
     dataset.paths = files
 end

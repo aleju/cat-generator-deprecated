@@ -65,13 +65,9 @@ function main()
     DATASET.setFileExtension("jpg")
     DATASET.setScale(OPT.scale)
 
-    -- 199,840 in 10k cats
-    -- 111,344 in flickr cats
     if OPT.aws then
-        --DATASET.setDirs({"/mnt/datasets/out_faces_64x64", "/mnt/datasets/images_faces_aug"})
         DATASET.setDirs({"/mnt/datasets/out_aug_64x64"})
     else
-        --DATASET.setDirs({"/media/aj/ssd2a/ml/datasets/10k_cats/out_faces_64x64", "/media/aj/ssd2a/ml/datasets/flickr-cats/images_faces_aug"})
         DATASET.setDirs({"dataset/out_aug_64x64"})
     end
     ----------------------------------------------------------------------
@@ -87,10 +83,17 @@ function main()
     print("G autoencoder:")
     print(G_AUTOENCODER)
     
+    -- Mean squared error criterion
     CRITERION = nn.MSECriterion()
+    
+    -- Get parameters and gradients
     PARAMETERS_G_AUTOENCODER, GRAD_PARAMETERS_G_AUTOENCODER = G_AUTOENCODER:getParameters()
+    
+    -- Initialize adam state
     OPTSTATE = {adam={}}
-    TRAIN_DATA = DATASET.loadRandomImages(10000)
+    
+    -- scaffold for normalization
+    --TRAIN_DATA = DATASET.loadRandomImages(10000)
     --NORMALIZE_MEAN, NORMALIZE_STD = TRAIN_DATA.normalize()
     
     -- training loop
@@ -105,7 +108,6 @@ function main()
         end
     end
 end
-
 
 -- Train G (in autoencoder form) for one epoch
 function epoch()
@@ -182,13 +184,12 @@ function epoch()
         os.execute(string.format("mkdir -p %s", sys.dirname(filename)))
         print(string.format("<trainer> saving network to %s", filename))
         
-        -- apparently something in the OPTSTATE is a CudaTensor, so saving it and then loading
-        -- in CPU mode would cause an error
-        -- :get(2) means here "get the decoder part of the autoencoder, dont save the encoder"
-        --torch.save(filename, {G=NN_UTILS.deactivateCuda(G_AUTOENCODER):get(2), opt=OPT, EPOCH=EPOCH+1}) --, optstate=OPTSTATE
+        -- Clone the autoencoder and deactivate cuda mode
         local G2 = G_AUTOENCODER:clone()
         G2:float()
         G2 = NN_UTILS.deactivateCuda(G2)
+        
+        -- :get(2) because we only want the decode part
         torch.save(filename, {G=G2:get(2), opt=OPT, EPOCH=EPOCH+1})
     end
     
@@ -218,7 +219,7 @@ function visualizeProgress()
     -- log the loss of the last encode-decode
     table.insert(PLOT_DATA, {EPOCH, CRITERION.output})
     
-    -- display images, images after encode-decode, pot of loss function
+    -- display images, images after encode-decode, plot of loss function
     DISP.image(imagesRealTensor, {win=OPT.window+0, width=IMG_DIMENSIONS[3]*15, title="Original images (before Autoencoder) (EPOCH " .. EPOCH .. ")"})
     DISP.image(imagesAfterG, {win=OPT.window+1, width=IMG_DIMENSIONS[3]*15, title="Images after autoencoder G (EPOCH " .. EPOCH .. ")"})
     DISP.plot(PLOT_DATA, {win=OPT.window+2, labels={'epoch', 'G Loss'}, title='G Loss'})

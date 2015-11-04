@@ -34,15 +34,15 @@ function adversarial.train(trainData, maxAccuracyD, accsInterval)
     local dataBatchSize = OPT.batchSize / 2 -- size of a half-batch for D or G
     local time = sys.clock()
     
-    -- variables to track D's accuracy
+    -- variables to track D's accuracy and adjust learning rates
     local lastAccuracyD = 0.0
     local doTrainD = true
     local countTrainedD = 0
     local countNotTrainedD = 0
     local count_lr_increased_D = 0
     local count_lr_decreased_D = 0
+    
     samples = nil
-
     local batchIdx = 0
 
     -- do one epoch
@@ -104,7 +104,6 @@ function adversarial.train(trainData, maxAccuracyD, accsInterval)
                 if outputs[i][1] > 0.5 then c = 2 else c = 1 end
                 CONFUSION:add(c, targets[i]+1)
                 confusion_batch_D:add(c, targets[i]+1)
-                --print("outputs[i][1]:" .. (outputs[i][1]) .. ", c: " .. c ..", targets[i]+1:" .. (targets[i]+1))
             end
 
             -- Clamp D's gradients
@@ -117,7 +116,7 @@ function adversarial.train(trainData, maxAccuracyD, accsInterval)
             confusion_batch_D:updateValids()
             local tV = confusion_batch_D.totalValid
             
-            -- this keeps the accuracy of D at around 80%
+            -- this old code would keep the accuracy of D at around 90% by adjusting learning rates
             --[[
             if EPOCH > 1 then
                 if tV > 0.95 then
@@ -179,7 +178,6 @@ function adversarial.train(trainData, maxAccuracyD, accsInterval)
             GRAD_PARAMETERS_G:zero() -- reset gradients
 
             -- forward pass
-            --local samples
             local samplesAE
             if MODEL_AE then
                 samplesAE = MODEL_AE:forward(noiseInputs)
@@ -209,15 +207,15 @@ function adversarial.train(trainData, maxAccuracyD, accsInterval)
                 GRAD_PARAMETERS_G:add(torch.sign(PARAMETERS_G):mul(OPT.G_L1) + PARAMETERS_G:clone():mul(OPT.G_L2))
             end
 
+            -- clamp G's Gradient to the range of -1.0 to +1.0
             if OPT.G_clamp ~= 0 then
                 GRAD_PARAMETERS_G:clamp((-1)*OPT.G_clamp, OPT.G_clamp)
             end
 
-            --GRAD_PARAMETERS_G:zero()
             return f,GRAD_PARAMETERS_G
         end
         
-        -- create closure to evaluate f(X) and df/dX of generator 
+        -- create closure to evaluate f(X) and df/dX of G2
         local fevalG2_on_D = function(x)
             collectgarbage()
             if x ~= PARAMETERS_G2 then -- get new parameters
@@ -227,47 +225,45 @@ function adversarial.train(trainData, maxAccuracyD, accsInterval)
             GRAD_PARAMETERS_G2:zero() -- reset gradients
 
             -- forward pass
-            --local samples
             local samples = MODEL_G2:forward(noiseInputs)
             local outputs = MODEL_D:forward(samples)
             local f = CRITERION:forward(outputs, targets)
-            --print(MODEL_G2.modules[1].modules[5])
-            --local G1_output = MODEL_G2.modules[1].modules[5].output
-            --local f = CRITERION_G2:forward({outputs, G1_output}, {targets, G1_output})
 
             --  backward pass
             local df_samples = CRITERION:backward(outputs, targets)
-            --local df_samples = CRITERION_G2:backward({outputs, G1_output}, {targets, G1_output})
             MODEL_D:backward(samples, df_samples)
             local df_do = MODEL_D.modules[1].gradInput
             
-            --local G1_output = MODEL_G2.modules[1].modules[2].modules[5].output
+            -- Get the output of G1, because we want to measure the difference between G1's output
+            -- and G2's output.
+            -- G1 is the first module in MODEL_G2. We take the output of the last layer/module
+            -- in G1. This will probably not work in CPU mode (missing copy layers).
             local G1_output = MODEL_G2.modules[1].modules[3].output
+            
             CRITERION_G2_DIFF:forward(samples, G1_output)
             local df_do_diff = CRITERION_G2_DIFF:backward(samples, G1_output)
             
-            --df_do:mul(0.0025)
+            -- Multiply the error from D's rating by 0.01, i.e. make D's influence on G2's output
+            -- lower. That was necessary to prevent overfitting on D.
             df_do:mul(0.01)
+            
+            -- add both erros
             local df_both = torch.add(df_do_diff, df_do)
             MODEL_G2:backward(noiseInputs, df_both)
-            --MODEL_G2:backward(noiseInputs, df_do)
 
-            local g2l1 = 0e-4
-            local g2l2 = 0e-4
             -- penalties (L1 and L2):
             if OPT.G_L1 ~= 0 or OPT.G_L2 ~= 0 then
                 -- Loss:
                 f = f + OPT.G_L1 * torch.norm(PARAMETERS_G2, 1)
                 f = f + OPT.G_L2 * torch.norm(PARAMETERS_G2, 2)^2/2
                 -- Gradients:
-                GRAD_PARAMETERS_G2:add(torch.sign(PARAMETERS_G2):mul(g2l1) + PARAMETERS_G2:clone():mul(g2l2))
+                GRAD_PARAMETERS_G2:add(torch.sign(PARAMETERS_G2):mul(OPT.G_L1) + PARAMETERS_G2:clone():mul(OPT.G_L2))
             end
 
+            -- clamp G2's Gradient to the range of -1.0 to +1.0
             if OPT.G_clamp ~= 0 then
                 GRAD_PARAMETERS_G2:clamp((-1)*OPT.G_clamp, OPT.G_clamp)
             end
-
-            --GRAD_PARAMETERS_G2:mul(0.5)
 
             return f,GRAD_PARAMETERS_G2
         end
@@ -310,52 +306,7 @@ function adversarial.train(trainData, maxAccuracyD, accsInterval)
             else
                 print("[Warning] Unknown optimizer method chosen for D.")
             end
-        end -- end for K
-
-        ---------------------------------------------------------------------
-        -- (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
-        -- Get half a minibatch of real, half fake
-        -- The fake images are synthetic
-        --[[
-        for k=1, OPT.D_iterations do
-            -- (1.1) Real data 
-            local inputIdx = 1
-            local realDataSize = thisBatchSize / 2
-            for i = 1, realDataSize do
-                local randomIdx = math.random(trainData:size())
-                inputs[inputIdx] = trainData[randomIdx]:clone()
-                targets[inputIdx] = Y_NOT_GENERATOR
-                inputIdx = inputIdx + 1
-            end
-            
-            -- (1.2) Sampled data
-            local samplesG = NN_UTILS.createImages(realDataSize, false)
-            local samplesD = MODEL_D:forward(samplesG)
-            local convLayer = MODEL_D:get(1)
-            local convOutput = convLayer.output
-            for i = 1, realDataSize do
-                local randomIdx = math.random(convOutput:size(2))
-                for channel=1, IMG_DIMENSIONS[1] do
-                    inputs[inputIdx][channel] = convOutput[i][randomIdx]:clone()
-                end
-                targets[inputIdx] = Y_GENERATOR
-                inputIdx = inputIdx + 1
-                if t == 1 and i == 1 then
-                    image.display(inputs[inputIdx-1])
-                end
-            end
-            
-            if OPT.D_optmethod == "sgd" then
-                interruptableSgd(fevalD, PARAMETERS_D, OPTSTATE.sgd.D)
-            elseif OPT.D_optmethod == "adagrad" then
-                interruptableAdagrad(fevalD, PARAMETERS_D, OPTSTATE.adagrad.D)
-            elseif OPT.D_optmethod == "adam" then
-                interruptableAdam(fevalD, PARAMETERS_D, OPTSTATE.adam.D)
-            else
-                print("[Warning] Unknown optimizer method chosen for D.")
-            end
         end
-        --]]
 
         ----------------------------------------------------------------------
         -- (2) Update G network: maximize log(D(G(z)))
@@ -374,25 +325,20 @@ function adversarial.train(trainData, maxAccuracyD, accsInterval)
             end
         end
         
-        if EPOCH > 0 then
-            for k=1, OPT.G_iterations do
-                noiseInputs = NN_UTILS.createNoiseInputs(noiseInputs:size(1))
-                targets:fill(Y_NOT_GENERATOR)
-                
-                --interruptableAdagrad(fevalG2_on_D, PARAMETERS_G2, OPTSTATE.adagrad.G2)
-                
-                
-                if OPT.G_optmethod == "sgd" then
-                    interruptableSgd(fevalG2_on_D, PARAMETERS_G2, OPTSTATE.sgd.G2)
-                elseif OPT.G_optmethod == "adagrad" then
-                    interruptableAdagrad(fevalG2_on_D, PARAMETERS_G2, OPTSTATE.adagrad.G2)
-                elseif OPT.G_optmethod == "adam" then
-                    interruptableAdam(fevalG2_on_D, PARAMETERS_G2, OPTSTATE.adam.G2)
-                else
-                    print("[Warning] Unknown optimizer method chosen for G2.")
-                end
-                
+        for k=1, OPT.G_iterations do
+            noiseInputs = NN_UTILS.createNoiseInputs(noiseInputs:size(1))
+            targets:fill(Y_NOT_GENERATOR)
+            
+            if OPT.G_optmethod == "sgd" then
+                interruptableSgd(fevalG2_on_D, PARAMETERS_G2, OPTSTATE.sgd.G2)
+            elseif OPT.G_optmethod == "adagrad" then
+                interruptableAdagrad(fevalG2_on_D, PARAMETERS_G2, OPTSTATE.adagrad.G2)
+            elseif OPT.G_optmethod == "adam" then
+                interruptableAdam(fevalG2_on_D, PARAMETERS_G2, OPTSTATE.adam.G2)
+            else
+                print("[Warning] Unknown optimizer method chosen for G2.")
             end
+            
         end
 
         batchIdx = batchIdx + 1
@@ -429,6 +375,8 @@ end
 -- NOTE: This function can only visualize one network proberly while the program runs.
 -- I.e. you can't call this function to show network A and then another time to show network B,
 -- because the function tries to reuse windows and that will not work correctly in such a case.
+--
+-- NOTE: Old function, probably doesn't work anymore.
 --
 -- @param net The network to visualize.
 -- @param minOutputs Minimum (output) size of a linear layer to be shown.

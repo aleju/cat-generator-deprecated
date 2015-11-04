@@ -34,15 +34,15 @@ function adversarial.train(trainData, maxAccuracyD, accsInterval)
     local dataBatchSize = OPT.batchSize / 2 -- size of a half-batch for D or G
     local time = sys.clock()
     
-    -- variables to track D's accuracy
+    -- variables to track D's accuracy and adjust learning rates
     local lastAccuracyD = 0.0
     local doTrainD = true
     local countTrainedD = 0
     local countNotTrainedD = 0
     local count_lr_increased_D = 0
     local count_lr_decreased_D = 0
+    
     samples = nil
-
     local batchIdx = 0
 
     -- do one epoch
@@ -104,7 +104,6 @@ function adversarial.train(trainData, maxAccuracyD, accsInterval)
                 if outputs[i][1] > 0.5 then c = 2 else c = 1 end
                 CONFUSION:add(c, targets[i]+1)
                 confusion_batch_D:add(c, targets[i]+1)
-                --print("outputs[i][1]:" .. (outputs[i][1]) .. ", c: " .. c ..", targets[i]+1:" .. (targets[i]+1))
             end
 
             -- Clamp D's gradients
@@ -117,7 +116,7 @@ function adversarial.train(trainData, maxAccuracyD, accsInterval)
             confusion_batch_D:updateValids()
             local tV = confusion_batch_D.totalValid
             
-            -- this keeps the accuracy of D at around 80%
+            -- this old code would keep the accuracy of D at around 90% by adjusting learning rates
             --[[
             if EPOCH > 1 then
                 if tV > 0.95 then
@@ -179,7 +178,6 @@ function adversarial.train(trainData, maxAccuracyD, accsInterval)
             GRAD_PARAMETERS_G:zero() -- reset gradients
 
             -- forward pass
-            --local samples
             local samplesAE
             if MODEL_AE then
                 samplesAE = MODEL_AE:forward(noiseInputs)
@@ -209,6 +207,7 @@ function adversarial.train(trainData, maxAccuracyD, accsInterval)
                 GRAD_PARAMETERS_G:add(torch.sign(PARAMETERS_G):mul(OPT.G_L2) + PARAMETERS_G:clone():mul(OPT.G_L2))
             end
 
+            -- clamp G's Gradient to the range of -1.0 to +1.0
             if OPT.G_clamp ~= 0 then
                 GRAD_PARAMETERS_G:clamp((-1)*OPT.G_clamp, OPT.G_clamp)
             end
@@ -248,52 +247,7 @@ function adversarial.train(trainData, maxAccuracyD, accsInterval)
             else
                 print("[Warning] Unknown optimizer method chosen for D.")
             end
-        end -- end for K
-
-        ---------------------------------------------------------------------
-        -- (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
-        -- Get half a minibatch of real, half fake
-        -- The fake images are synthetic
-        --[[
-        for k=1, OPT.D_iterations do
-            -- (1.1) Real data 
-            local inputIdx = 1
-            local realDataSize = thisBatchSize / 2
-            for i = 1, realDataSize do
-                local randomIdx = math.random(trainData:size())
-                inputs[inputIdx] = trainData[randomIdx]:clone()
-                targets[inputIdx] = Y_NOT_GENERATOR
-                inputIdx = inputIdx + 1
-            end
-            
-            -- (1.2) Sampled data
-            local samplesG = NN_UTILS.createImages(realDataSize, false)
-            local samplesD = MODEL_D:forward(samplesG)
-            local convLayer = MODEL_D:get(1)
-            local convOutput = convLayer.output
-            for i = 1, realDataSize do
-                local randomIdx = math.random(convOutput:size(2))
-                for channel=1, IMG_DIMENSIONS[1] do
-                    inputs[inputIdx][channel] = convOutput[i][randomIdx]:clone()
-                end
-                targets[inputIdx] = Y_GENERATOR
-                inputIdx = inputIdx + 1
-                if t == 1 and i == 1 then
-                    image.display(inputs[inputIdx-1])
-                end
-            end
-            
-            if OPT.D_optmethod == "sgd" then
-                interruptableSgd(fevalD, PARAMETERS_D, OPTSTATE.sgd.D)
-            elseif OPT.D_optmethod == "adagrad" then
-                interruptableAdagrad(fevalD, PARAMETERS_D, OPTSTATE.adagrad.D)
-            elseif OPT.D_optmethod == "adam" then
-                interruptableAdam(fevalD, PARAMETERS_D, OPTSTATE.adam.D)
-            else
-                print("[Warning] Unknown optimizer method chosen for D.")
-            end
         end
-        --]]
 
         ----------------------------------------------------------------------
         -- (2) Update G network: maximize log(D(G(z)))
@@ -301,8 +255,6 @@ function adversarial.train(trainData, maxAccuracyD, accsInterval)
             noiseInputs = NN_UTILS.createNoiseInputs(noiseInputs:size(1))
             targets:fill(Y_NOT_GENERATOR)
             
-            --optim.sgd(fevalG_on_D, parameters_G, OPTSTATE.sgd.G)
-            --optim.adagrad(fevalG_on_D, parameters_G, ADAGRAD_STATE_G)
             if OPT.G_optmethod == "sgd" then
                 interruptableSgd(fevalG_on_D, PARAMETERS_G, OPTSTATE.sgd.G)
             elseif OPT.G_optmethod == "adagrad" then
@@ -321,7 +273,7 @@ function adversarial.train(trainData, maxAccuracyD, accsInterval)
         if OPT.weightsVisFreq > 0 and batchIdx % OPT.weightsVisFreq == 0 then
             adversarial.visualizeNetwork(MODEL_D)
         end
-    end -- end for loop over dataset
+    end
 
     -- time taken
     time = sys.clock() - time
@@ -348,6 +300,8 @@ end
 -- NOTE: This function can only visualize one network proberly while the program runs.
 -- I.e. you can't call this function to show network A and then another time to show network B,
 -- because the function tries to reuse windows and that will not work correctly in such a case.
+--
+-- NOTE: Old function, probably doesn't work anymore.
 --
 -- @param net The network to visualize.
 -- @param minOutputs Minimum (output) size of a linear layer to be shown.

@@ -34,7 +34,6 @@ end
 -- @returns Tensor of shape (N, OPT.noiseDim)
 function nn_utils.createNoiseInputs(N)
     local noiseInputs = torch.Tensor(N, OPT.noiseDim)
-    --noiseInputs:normal(0.0, 0.35)
     noiseInputs:uniform(-1.0, 1.0)
     return noiseInputs
 end
@@ -226,7 +225,14 @@ function nn_utils.switchToEvaluationMode()
     MODEL_D:evaluate()
 end
 
+-- Normalize given images, currently to range -1.0 (black) to +1.0 (white), assuming that
+-- the input images are normalized to range 0.0 (black) to +1.0 (white).
+-- @param data Tensor of images
+-- @param mean_ Currently ignored.
+-- @param std_ Currently ignored.
+-- @return (mean, std), both currently always 0.5 dummy values
 function nn_utils.normalize(data, mean_, std_)
+    -- Code to normalize to zero-mean and unit-variance.
     --[[
     local mean = mean_ or data:mean(1)
     local std = std_ or data:std(1, true)
@@ -246,6 +252,8 @@ function nn_utils.normalize(data, mean_, std_)
     return mean, std
     --]]
     
+    -- Code to normalize to range -1.0 to +1.0, where -1.0 is black and 1.0 is the maximum
+    -- value in this image.
     --[[
     local N
     if data.size ~= nil then
@@ -262,6 +270,7 @@ function nn_utils.normalize(data, mean_, std_)
     end
     --]]
     
+    -- Normalize to range -1.0 to +1.0, where -1.0 is black and +1.0 is white.
     local N
     if data.size ~= nil then
         N = data:size(1)
@@ -275,6 +284,7 @@ function nn_utils.normalize(data, mean_, std_)
         data[i] = torch.clamp(data[i], -1.0, 1.0)
     end
     
+    -- Dummy return values
     return 0.5, 0.5
 end
 
@@ -332,6 +342,9 @@ CHAR_TENSORS[9] = torch.Tensor({{1, 1, 1},
                                 {1, 1, 1}})
 
 -- Converts a list of images to a grid of images that can be saved easily.
+-- It will also place the epoch number at the bottom of the image.
+-- At least parts of this function probably should have been a simple call
+-- to image.toDisplayTensor().
 -- @param images List of image tensors
 -- @param height Height of the grid
 -- @param width Width of the grid
@@ -412,6 +425,9 @@ function nn_utils.deactivateCuda(net)
     end
 end
 
+-- Returns whether a Sequential contains any copy layers.
+-- @param net The network to analyze.
+-- @return boolean
 function nn_utils.containsCopyLayers(net)
     local modules = net:listModules()
     for i=1,#modules do
