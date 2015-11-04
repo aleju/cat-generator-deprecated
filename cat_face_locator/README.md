@@ -7,6 +7,6 @@ Therefore, rotations could not be removed reliably. (Might be no longer a proble
 The code is very messy and might not even work currently. Most parts could and should be replaced by the classes in `dataset/dataset.py`.
 I will probably extract the code into its own project and clean it up at some point in the future.
 
-![Cat face locator example](images/example.png?raw=true "Cat face locator example")
+![Cat face locator example](example.png?raw=true "Cat face locator example")
 
 Note: Code to track the eye positions is currently not in this repository.
