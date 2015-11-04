@@ -9,11 +9,34 @@ NN_UTILS = require 'utils.nn_utils'
 DATASET = require 'dataset'
 
 OPT = lapp[[
+    --save_base     (default "logs")                          Directory in which the base 16x16 networks are stored.
+    --save_c2f22    (default "logs")                          Directory in which the 16 to 22 coarse to fine networks are stored.
+    --save_c2f32    (default "logs")                          Directory in which the 22 to 32 coarse to fine networks are stored.
+    --G_base        (default "et1b_adversarial.net")          Filename for the 16x16 base network to load G from.
+    --D_base        (default "et1b_adversarial.net")          Filename for the 16x16 base network to load D from.
+    --G_c2f22       (default "adversarial_c2f_16_to_22.net")  Filename for the 16 to 22 coarse to fine network to load D from.
+    --D_c2f22       (default "adversarial_c2f_16_to_22.net")  Filename for the 16 to 22 coarse to fine network to load D from.
+    --G_c2f32       (default "adversarial_c2f_22_to_32.net")  Filename for the 22 to 32 coarse to fine network to load D from.
+    --D_c2f32       (default "adversarial_c2f_22_to_32.net")  Filename for the 22 to 32 coarse to fine network to load D from.
+    --neighbours                                              Whether to search for nearest neighbours of generated images in the dataset (takes long)
+    --scale         (default 16)                              Height/Width of images in the base network.
+    --grayscale                                               Grayscale mode on/off
+    --writeto       (default "samples")                       Directory to save the images to
+    --seed          (default 1)                               Random number seed to use.
+    --gpu           (default 0)                               GPU to run on
+    --runs          (default 1)                               How often to sample and save images
+    --noiseDim      (default 100)                             Noise vector size (for 16x16 net).
+    --batchSize     (default 16)                              Sizes of batches.
+    --aws                                                     Run in AWS mode.
+]]
+
+-- Paths I used during testing stages, just ignore them
+--[[
     --save_base     (default "logs/final")                 directory in which the networks are saved
     --save_c2f22    (default "logs/final")
     --save_c2f32    (default "logs/final")
-    --G_base        (default "e43e_adversarial.net")      
-    --D_base        (default "e43e_adversarial.net")      
+    --G_base        (default "et1b_adversarial.net")      
+    --D_base        (default "et1b_adversarial.net")      
     --G_c2f22       (default "e2-3b_adversarial_c2f_16_to_22.net")  
     --D_c2f22       (default "e2-3b_adversarial_c2f_16_to_22.net")  
     --G_c2f32       (default "e2-3d_adversarial_c2f_22_to_32_e650.net")  
@@ -29,62 +52,6 @@ OPT = lapp[[
     --batchSize     (default 16)
     --aws                                                  run in AWS mode
 ]]
-
---[[
-    --save_base     (default "logs/final")                 directory in which the networks are saved
-    --save_c2f22    (default "logs/final")
-    --save_c2f32    (default "logs/final")
-    --G_base        (default "et1b_adversarial3.net")      
-    --D_base        (default "et1b_adversarial3.net")      
-    --G_c2f22       (default "e2-3b_adversarial_c2f_16_to_22.net")  
-    --D_c2f22       (default "e2-3b_adversarial_c2f_16_to_22.net")  
-    --G_c2f32       (default "e2-3d_adversarial_c2f_22_to_32_e650.net")  
-    --D_c2f32       (default "e2-3d_adversarial_c2f_22_to_32_e650.net")  
-    --neighbours                                           Whether to search for nearest neighbours of generated images in the dataset (takes long)
-    --scale         (default 16)
-    --grayscale                                            grayscale mode on/off
-    --writeto       (default "samples")                    directory to save the images to
-    --seed          (default 1)
-    --gpu           (default 0)                            GPU to run on
-    --runs          (default 1)                           How often to sample and save images
-    --noiseDim      (default 100)
-    --batchSize     (default 16)
-    --aws                                                  run in AWS mode
---]]
-
---[[
-    --save_base     (default "logs/final")                 directory in which the networks are saved
-    --save_c2f22    (default "logs")
-    --save_c2f32    (default "logs/final")
-    --G_base        (default "e43e_adversarial.net")      
-    --D_base        (default "e43e_adversarial.net")      
-    --G_c2f22       (default "adversarial_c2f_16_to_22.net")  
-    --D_c2f22       (default "adversarial_c2f_16_to_22.net")  
-    --G_c2f32       (default "e2-3d_adversarial_c2f_22_to_32_e650.net")  
-    --D_c2f32       (default "e2-3d_adversarial_c2f_22_to_32_e650.net")  
-    --neighbours                                           Whether to search for nearest neighbours of generated images in the dataset (takes long)
-    --scale         (default 16)
-    --grayscale                                            grayscale mode on/off
-    --writeto       (default "samples")                    directory to save the images to
-    --seed          (default 1)
-    --gpu           (default 0)                            GPU to run on
-    --runs          (default 1)                           How often to sample and save images
-    --noiseDim      (default 100)
-    --batchSize     (default 16)
-    --aws                                                  run in AWS mode
---]]
-
---[[
-    --save_base     (default "logs/final")                 directory in which the networks are saved
-    --save_c2f22    (default "logs/final")
-    --save_c2f32    (default "logs/final")
-    --G_base        (default "e43e_adversarial.net")      
-    --D_base        (default "e43e_adversarial.net")      
-    --G_c2f22       (default "e2-1b_adversarial_c2f_16_to_22.net")  
-    --D_c2f22       (default "e2-1b_adversarial_c2f_16_to_22.net")  
-    --G_c2f32       (default "e2-2b_adversarial_c2f_22_to_32.net")  
-    --D_c2f32       (default "e2-2b_adversarial_c2f_22_to_32.net") 
---]]
 
 if OPT.gpu < 0 then
     print("[ERROR] Sample script currently only runs on GPU, set --gpu=x where x is between 0 and 3.")
