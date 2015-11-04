@@ -12,8 +12,8 @@ OPT = lapp[[
     --save_base     (default "logs/final")                 directory in which the networks are saved
     --save_c2f22    (default "logs/final")
     --save_c2f32    (default "logs/final")
-    --G_base        (default "et1b_adversarial3.net")      
-    --D_base        (default "et1b_adversarial3.net")      
+    --G_base        (default "e43e_adversarial.net")      
+    --D_base        (default "e43e_adversarial.net")      
     --G_c2f22       (default "e2-3b_adversarial_c2f_16_to_22.net")  
     --D_c2f22       (default "e2-3b_adversarial_c2f_16_to_22.net")  
     --G_c2f32       (default "e2-3d_adversarial_c2f_22_to_32_e650.net")  
@@ -375,7 +375,7 @@ function loadModels()
     
     -- load G base
     file = torch.load(paths.concat(OPT.save_base, OPT.G_base))
-    local G = file.G2
+    local G = file.G
     G:evaluate()
     
     -- load D base
