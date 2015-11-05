@@ -331,7 +331,14 @@ class ImageWithKeypoints(object):
                 self.image_arr[y, rect.br_x, ...] = color_tuple
 
     def draw_face_rectangles(self):
-        """Draw all face rectangles onto the image according to the 5 existing methods."""
+        """Draw all face rectangles onto the image according to the 5 existing methods.
+        Colors:
+            Green = Method 0
+            Blue = Method 1
+            Red = Method 2
+            Yellow = Method 3
+            Cyan = Method 4
+        """
         self.draw_rectangle(self.keypoints.get_rectangle(self, method=0), color_tuple=(0, 255, 0))
         self.draw_rectangle(self.keypoints.get_rectangle(self, method=1), color_tuple=(0, 0, 255))
         self.draw_rectangle(self.keypoints.get_rectangle(self, method=2), color_tuple=(255, 0, 0))
@@ -853,14 +860,16 @@ class Rectangle(object):
         """
         assert not self.is_normalized
 
-        #img_height = self.br_y - self.tl_y
-        #img_width = self.br_x - self.tl_x
         img_height = image.get_height()
         img_width = image.get_width()
         height = self.get_height()
         width = self.get_width()
 
         # extend by adding cols / rows until borders of image are reached
+        # removed, because only removing cols/rows was really tested.
+        # Fixme: test with adding cols/rows
+        # Todo: change method so that it adds and removes cols/rows at the same time
+        """
         i = 0
         while width < height and self.br_x < img_width and self.tl_x > 0:
             if i % 2 == 0:
@@ -868,6 +877,7 @@ class Rectangle(object):
             else:
                 self.br_x += 1
             width += 1
+            i += 1
 
         while height < width and self.br_y < img_height and self.tl_y > 0:
             if i % 2 == 0:
@@ -875,6 +885,8 @@ class Rectangle(object):
             else:
                 self.br_y += 1
             height += 1
+            i += 1
+        """
 
         # remove cols / rows until rectangle is squared
         # this part was written at a different time, which is why the removal works differently,
