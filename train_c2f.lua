@@ -138,15 +138,10 @@ else
     MODEL_G = MODELS.create_G(IMG_DIMENSIONS, OPT.noiseDim, OPT.gpu ~= false)
 end
 
--- Fixme that shouldnt be here anymore
-local tmp = torch.load(OPT.network)
-MODEL_SMALL_G = tmp.G
-
 if OPT.gpu then
     print("Copying model to gpu...")
     MODEL_D = NN_UTILS.activateCuda(MODEL_D)
     MODEL_G = NN_UTILS.activateCuda(MODEL_G)
-    MODEL_SMALL_G = NN_UTILS.activateCuda(MODEL_SMALL_G)
 end
 
 -- loss function: negative log-likelihood
