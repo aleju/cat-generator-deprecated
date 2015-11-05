@@ -41,7 +41,7 @@ OPT = lapp[[
   --noiseDim         (default 100)          dimensionality of noise vector
   --window           (default 3)            window id of sample image
   --coarseSize       (default 16)           coarse scale
-  --fineSize         (default 32)           fine scale
+  --fineSize         (default 22)           fine scale
   --parzenImages     (default 250)          Number of images in approximate parzen (nsamples)
   --parzenNeighbours (default 32)           Number of generated refinements per image in approximate parzen (will choose min distance)
   --grayscale                               grayscale mode on/off
