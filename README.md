@@ -1,3 +1,7 @@
+**Note**: This project is deprecated and was replaced by [a new version](https://github.com/aleju/cat-generator), which uses a new architecture for G to get rid of the laplacian pyramid training steps. That simplifies the whole training process significantly. The new architecture also results in higher quality images.
+
+--------------------------
+
 # About
 
 This script generates new images of cats using the technique of generative adversarial networks (GAN), as described in [the paper](http://arxiv.org/abs/1406.2661) by [Goodfellow](https://github.com/goodfeli) et al.
@@ -111,11 +115,6 @@ Notes:
   * `G_L2=float`: L2 norm of G.
   * `D_L1=float`: L1 norm of D.
   * `D_L2=float`: L2 norm of D.
-* If you value your sanity, don't work with GANs. Their funny features:
-  * They blow up. They *love* blowing up. They blow up all - the - goddamn - time. Add a pooling layer? Blow up! Change some kernel size from 7x7 to 5x5? Blow up! Change the number of examples per epoch? Blow up! Prepare for lots of babysitting of networks. (Well, after the first couple of epochs they tend to become more stable. It still remains hard to just peacefully let them run for a couple of hours.)
-  * No batch normalization, therefore nicely long training times. What happens when you add Batch Normalization? See above.
-  * No objective scores. So good luck at finding out whether your network is actually better than another network.
-  * With the laplacian pyramid you will have to train not one, but several networks. Depending on how you train them, these might be interdependend on each other. So if you tinker with the base generator, you will have to retrain the whole chain afterwards.
 
 
 # V
